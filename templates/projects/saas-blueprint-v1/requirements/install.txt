@@ -1,0 +1,13 @@
+# =============================================================
+# requirements/install.txt — SaaS Blueprint V1 project
+# =============================================================
+# Each line is a path (relative to project root):
+#   FILE  → .venv created at path.parent.parent, pip install -r <file>
+#   DIR   → delegates to <dir>/scripts/setup_env.py  (legacy)
+# Lines starting with # are ignored.
+# =============================================================
+
+services/backend/requirements/install.txt
+services/auth-service/requirements/install.txt
+services/frontend/package.json
+services/frontend-etl/package.json

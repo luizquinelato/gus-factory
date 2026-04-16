@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ PROJECT_NAME }} — Login (referência visual)</title>
+<style>
+/* CSS Custom Properties do tenant — em runtime são injetadas pelo useColorApplication */
+:root {
+  --color-1:#297BFF; --color-2:#0CC02A; --color-3:#005F61;
+  --color-4:#6F74B8; --color-5:#220080;
+  --gradient-1-2:linear-gradient(135deg,#297BFF,#0CC02A);
+  --on-gradient-1-2:#ffffff;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;overflow:hidden}
+canvas{position:fixed;inset:0;background:linear-gradient(135deg,#0f172a 0%,#1e293b 50%,#0f172a 100%)}
+.wrap{position:relative;z-index:10;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:2rem}
+.card{
+  width:100%;max-width:480px;border-radius:32px;padding:3rem;
+  background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);
+  backdrop-filter:blur(20px);box-shadow:0 25px 50px -12px rgba(0,0,0,.5);
+  animation:rise .6s ease-out
+}
+@keyframes rise{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
+.hd{text-align:center;margin-bottom:2.5rem}
+.logo{
+  width:80px;height:80px;border-radius:20px;margin:0 auto 1.5rem;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--gradient-1-2);box-shadow:0 10px 30px rgba(0,0,0,.3);
+  font-size:2rem;font-weight:900;color:var(--on-gradient-1-2)
+}
+.hd h1{color:#fff;font-size:2rem;font-weight:700;margin-bottom:.5rem}
+.hd p{color:#94a3b8}
+.fg{margin-bottom:1.5rem}
+label{display:block;color:#e2e8f0;font-size:.875rem;font-weight:500;margin-bottom:.5rem}
+input{
+  width:100%;padding:1rem 1.25rem;border-radius:16px;font-size:1rem;outline:none;
+  background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);
+  color:#fff;transition:all .3s
+}
+input:focus{
+  border-color:var(--color-1);
+  box-shadow:0 0 0 4px color-mix(in srgb,var(--color-1) 20%,transparent)
+}
+input::placeholder{color:#475569}
+.err{
+  background:rgba(239,68,68,.2);border:1px solid rgba(239,68,68,.3);
+  border-radius:8px;padding:.75rem;color:#fca5a5;font-size:.875rem;
+  margin-bottom:1.5rem;display:none
+}
+.btn{
+  width:100%;padding:1rem;border:none;border-radius:16px;
+  font-size:1rem;font-weight:600;cursor:pointer;transition:all .3s;
+  background:var(--gradient-1-2);color:var(--on-gradient-1-2);
+  box-shadow:0 10px 25px rgba(0,0,0,.3)
+}
+.btn:hover{transform:translateY(-2px);box-shadow:0 15px 35px rgba(0,0,0,.4)}
+.btn:disabled{opacity:.5;transform:none;cursor:not-allowed}
+.note{margin-top:1.5rem;text-align:center;color:#475569;font-size:.75rem}
+.pw-wrap{position:relative}
+.pw-wrap input{padding-right:3rem}
+.pw-toggle{
+  position:absolute;right:1rem;top:50%;transform:translateY(-50%);
+  background:none;border:none;color:#94a3b8;cursor:pointer;
+  display:flex;align-items:center;padding:0;line-height:0
+}
+.pw-toggle:hover{color:#cbd5e1}
+</style>
+</head>
+<body>
+<canvas id="bg"></canvas>
+<div class="wrap">
+  <div class="card">
+    <div class="hd">
+      <!-- Substituir pelo logo SVG real do projeto -->
+      <div class="logo">{{ PROJECT_PREFIX }}</div>
+      <h1>{{ PROJECT_NAME }}</h1>
+      <p>{{ PROJECT_DESCRIPTION_SHORT }}</p>
+    </div>
+    <form id="f">
+      <div class="fg">
+        <label>Email</label>
+        <input type="email" id="email" placeholder="voce@empresa.com" autocomplete="email" required>
+      </div>
+      <div class="fg">
+        <label>Senha</label>
+        <div class="pw-wrap">
+          <input type="password" id="pwd" placeholder="••••••••" autocomplete="current-password" required>
+          <button type="button" class="pw-toggle" id="pw-btn" aria-label="Mostrar senha">
+            <svg id="ico-eye" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+            </svg>
+            <svg id="ico-eye-off" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+              <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="err" id="err"></div>
+      <button type="submit" class="btn" id="btn">Entrar</button>
+    </form>
+    <p class="note">Referência visual — backend não conectado neste arquivo</p>
+  </div>
+</div>
+<script>
+// ── QuantumBackground — canvas com partículas animadas ─────────────────────
+// Traduzir para: src/components/QuantumBackground.tsx
+// As cores são lidas das CSS Custom Properties em runtime (getComputedStyle).
+const cv=document.getElementById('bg'),cx=cv.getContext('2d')
+const COLORS=['#297BFF','#0CC02A','#005F61','#6F74B8']  // fallback — usa --color-1..4 em runtime
+const resize=()=>{cv.width=innerWidth;cv.height=innerHeight}
+resize();window.addEventListener('resize',resize)
+const pts=Array.from({length:80},()=>({
+  x:Math.random()*cv.width,y:Math.random()*cv.height,
+  vx:(Math.random()-.5)*.5,vy:(Math.random()-.5)*.5,
+  r:Math.random()*2+1,c:COLORS[Math.floor(Math.random()*COLORS.length)]
+}));
+(function draw(){
+  cx.clearRect(0,0,cv.width,cv.height)
+  pts.forEach(p=>{
+    p.x+=p.vx;p.y+=p.vy
+    if(p.x<0||p.x>cv.width)p.vx*=-1
+    if(p.y<0||p.y>cv.height)p.vy*=-1
+    cx.beginPath();cx.arc(p.x,p.y,p.r,0,Math.PI*2);cx.fillStyle=p.c;cx.fill()
+  })
+  for(let i=0;i<pts.length;i++)for(let j=i+1;j<pts.length;j++){
+    const dx=pts[i].x-pts[j].x,dy=pts[i].y-pts[j].y,d=Math.sqrt(dx*dx+dy*dy)
+    if(d<150){cx.beginPath();cx.strokeStyle=`rgba(255,255,255,${.1*(1-d/150)})`;cx.lineWidth=1
+      cx.moveTo(pts[i].x,pts[i].y);cx.lineTo(pts[j].x,pts[j].y);cx.stroke()}
+  }
+  requestAnimationFrame(draw)
+})()
+
+// ── Toggle mostrar/ocultar senha ───────────────────────────────────────────
+;(function(){
+  const inp=document.getElementById('pwd')
+  const btn=document.getElementById('pw-btn')
+  const eyeOpen=document.getElementById('ico-eye')
+  const eyeOff=document.getElementById('ico-eye-off')
+  btn.addEventListener('click',function(){
+    const show=inp.type==='password'
+    inp.type=show?'text':'password'
+    eyeOpen.style.display=show?'none':'block'
+    eyeOff.style.display=show?'block':'none'
+    btn.setAttribute('aria-label',show?'Ocultar senha':'Mostrar senha')
+  })
+})()
+
+// ── Form demo (simula loading + mensagem) ──────────────────────────────────
+document.getElementById('f').onsubmit=async e=>{
+  e.preventDefault()
+  const btn=document.getElementById('btn'),err=document.getElementById('err')
+  btn.disabled=true;btn.textContent='Entrando...';err.style.display='none'
+  await new Promise(r=>setTimeout(r,1200))
+  err.style.display='block'
+  err.textContent='Demo visual — implemente a chamada real à API no projeto.'
+  btn.disabled=false;btn.textContent='Entrar'
+}
+</script>
+</body>
+</html>

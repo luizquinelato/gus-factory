@@ -1,0 +1,76 @@
+# ===========================
+# SaaS Blueprint V1 — arquivos com credenciais
+# ===========================
+# Variáveis do projeto (senhas, chaves, paths locais)
+docs/initial/00-variables.md
+# Prompt gerado (contém senhas de seed e e-mails reais)
+docs/prompts/
+
+# ===========================
+# Python / FastAPI
+# ===========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+.env
+.env.*
+!.env.example
+*.log
+.mypy_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ===========================
+# Node / React / Vite
+# ===========================
+node_modules/
+dist/
+dist-ssr/
+*.local
+.cache/
+.eslintcache
+
+# ===========================
+# Docker
+# ===========================
+docker-compose.override.yml
+
+# ===========================
+# Banco de dados / volumes
+# ===========================
+postgres_data/
+redis_data/
+qdrant_data/
+*.sql.bak
+*.dump
+
+# ===========================
+# IDEs e editores
+# ===========================
+.vscode/
+.idea/
+*.DS_Store
+Thumbs.db
+
+# ===========================
+# Secrets / Certificados
+# ===========================
+*.pem
+*.key
+*.crt
+secrets/
+
+# ===========================
+# Logs gerados
+# ===========================
+logs/
+*.log

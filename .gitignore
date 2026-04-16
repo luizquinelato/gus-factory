@@ -1,0 +1,100 @@
+# ===========================
+# Python / FastAPI
+# ===========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+env/
+ENV/
+.env
+.env.*
+!.env.example
+*.log
+*.pot
+*.pyc
+.mypy_cache/
+.dmypy.json
+.pyre/
+.ruff_cache/
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# ===========================
+# Node / React / Vite
+# ===========================
+node_modules/
+dist/
+dist-ssr/
+*.local
+.cache/
+.parcel-cache/
+.turbo/
+.eslintcache
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ===========================
+# Docker
+# ===========================
+*.override.yml
+docker-compose.override.yml
+
+# ===========================
+# Banco de dados / volumes
+# ===========================
+postgres_data/
+redis_data/
+qdrant_data/
+pgdata/
+*.sql.bak
+*.dump
+
+# ===========================
+# IDEs e editores
+# ===========================
+.vscode/*
+!.vscode/settings.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.DS_Store
+Thumbs.db
+
+# ===========================
+# Secrets / Certificados
+# ===========================
+*.pem
+*.key
+*.crt
+*.p12
+secrets/
+
+# ===========================
+# Gerados pelo projeto
+# ===========================
+generated_prompt.md
+generated_prompt*.md
+PROMPT_EXECUCAO*.md
+PROMPT_INICIAL*.md
+projects/*/prompts/
+*.tmp
+
+# ===========================
+# Variáveis de projeto (contém senhas e dados sensíveis)
+# ===========================
+projects/*/00-variables.md

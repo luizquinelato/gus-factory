@@ -1,0 +1,153 @@
+shared_services:
+  backend_prod:
+  - {port: 10000, project: saas-blueprint-v1}
+  - {port: 8000, project: plumo}
+  - {port: 3001, project: pulse}
+  backend_dev:
+  - {port: 10010, project: saas-blueprint-v1}
+  - {port: 8010, project: plumo}
+  - {port: 3011, project: pulse}
+  auth_prod:
+  - {port: 10100, project: saas-blueprint-v1}
+  - {port: 8001, project: plumo}
+  - {port: 4000, project: pulse}
+  auth_dev:
+  - {port: 10110, project: saas-blueprint-v1}
+  - {port: 8011, project: plumo}
+  - {port: 4010, project: pulse}
+  frontend_prod:
+  - {port: 5177, project: saas-blueprint-v1}
+  - {port: 5173, project: plumo}
+  - {port: 3000, project: pulse}
+  frontend_dev:
+  - {port: 5178, project: saas-blueprint-v1}
+  - {port: 5174, project: plumo}
+  - {port: 3010, project: pulse}
+  etl_frontend_prod:
+  - {port: 3344, project: saas-blueprint-v1}
+  - {port: 3333, project: pulse}
+  etl_frontend_dev:
+  - {port: 3345, project: saas-blueprint-v1}
+  - {port: 3343, project: pulse}
+  db_prod:
+  - {port: 5444, project: saas-blueprint-v1}
+  - {port: 5432, project: plumo}
+  - {port: 5437, project: pulse}
+  db_prod_replica:
+  - {port: 5445, project: saas-blueprint-v1}
+  - {port: 5438, project: pulse}
+  db_dev:
+  - {port: 5446, project: saas-blueprint-v1}
+  - {port: 5433, project: plumo}
+  - {port: 5439, project: pulse}
+  db_replica_dev:
+  - {port: 5447, project: saas-blueprint-v1}
+  - {port: 5440, project: pulse}
+  redis:
+  - {port: 6385, project: saas-blueprint-v1}
+  - {port: 6379, project: pulse}
+  redis_dev:
+  - {port: 6383, project: saas-blueprint-v1}
+  - {port: 6381, project: pulse}
+  qdrant:
+  - {port: 6343, project: saas-blueprint-v1}
+  - {port: 6333, project: pulse}
+  qdrant_grpc:
+  - {port: 6344, project: saas-blueprint-v1}
+  - {port: 6334, project: pulse}
+  qdrant_dev:
+  - {port: 6341, project: saas-blueprint-v1}
+  - {port: 6337, project: pulse}
+  qdrant_grpc_dev:
+  - {port: 6342, project: saas-blueprint-v1}
+  - {port: 6338, project: pulse}
+  rabbitmq_amqp:
+  - {port: 5675, project: saas-blueprint-v1}
+  - {port: 5672, project: pulse}
+  rabbitmq_mgmt:
+  - {port: 15675, project: saas-blueprint-v1}
+  - {port: 15672, project: pulse}
+  rabbitmq_amqp_dev:
+  - {port: 5674, project: saas-blueprint-v1}
+  - {port: 5673, project: pulse}
+  rabbitmq_mgmt_dev:
+  - {port: 15674, project: saas-blueprint-v1}
+  - {port: 15673, project: pulse}
+projects:
+  saas-blueprint-v1:
+    label: SaaS Blueprint V1 — Projeto Base SaaS Multi-Tenant
+    alias: blueprint
+    root: C:\Workspace\gus-factory\templates\projects\saas-blueprint-v1
+    color: Green
+    legacy: false
+    conflicts_with: []
+    prod:
+      svc: {backend: 10000, auth: 10100, frontend: 5177, etl_frontend: 3344}
+      db: {port: 5444, replica: 5445, name: saas_blueprint_v1, user: saas_blueprint_v1, pass: saas_blueprint_v1}
+      rabbit: {user: guest, pass: guest, vhost: /}
+    dev:
+      svc: {backend: 10010, auth: 10110, frontend: 5178, etl_frontend: 3345}
+      db: {port: 5446, replica: 5447, name: saas_blueprint_v1_dev, user: saas_blueprint_v1, pass: saas_blueprint_v1}
+      rabbit: {user: guest, pass: guest, vhost: /}
+    extra_ports:
+    - {name: redis, port: 6385, proto: tcp}
+    - {name: qdrant, port: 6343, proto: http}
+    - {name: qdrant_grpc, port: 6344, proto: grpc}
+    - {name: rabbitmq_mgmt, port: 15675, proto: http}
+    - {name: rabbitmq_amqp, port: 5675, proto: amqp}
+    extra_ports_dev:
+    - {name: redis_dev, port: 6383, proto: tcp}
+    - {name: qdrant_dev, port: 6341, proto: http}
+    - {name: qdrant_grpc_dev, port: 6342, proto: grpc}
+    - {name: rabbitmq_mgmt_dev, port: 15674, proto: http}
+    - {name: rabbitmq_amqp_dev, port: 5674, proto: amqp}
+  plumo:
+    label: Plumo — Finanças leves, vida plena
+    root: C:\Workspace\gus-plumo
+    color: Cyan
+    legacy: true
+    conflicts_with: []
+    prod:
+      svc: {backend: 8000, auth: 8001, frontend: 5173}
+      db: {port: 5432, name: plumo, user: plumo, pass: plumo}
+    dev:
+      svc: {backend: 8010, auth: 8011, frontend: 5174}
+      db: {port: 5433, name: plumo_dev, user: plumo, pass: plumo}
+    extra_ports: []
+  pulse:
+    label: Pulse — Health Pulse Platform
+    root: C:\Workspace\gus-pulse
+    color: Yellow
+    legacy: true
+    conflicts_with:
+    - plumo
+    prod:
+      svc: {backend: 3001, auth: 4000, frontend: 3000, etl_frontend: 3333}
+      db: {port: 5437, replica: 5438, name: pulse, user: pulse, pass: pulse}
+      rabbit: {user: pulse, pass: pulse, vhost: pulse_etl}
+    dev:
+      svc: {backend: 3011, auth: 4010, frontend: 3010, etl_frontend: 3343}
+      db: {port: 5439, replica: 5440, name: pulse_dev, user: pulse, pass: pulse}
+      rabbit: {user: pulse, pass: pulse, vhost: pulse_etl_dev}
+    extra_ports:
+    - {name: redis, port: 6379, proto: tcp}
+    - {name: qdrant, port: 6333, proto: http}
+    - {name: qdrant_grpc, port: 6334, proto: grpc}
+    - {name: rabbitmq_mgmt, port: 15672, proto: http}
+    - {name: rabbitmq_amqp, port: 5672, proto: amqp}
+    extra_ports_dev:
+    - name: redis_dev
+      port: 6381
+      proto: tcp
+    - name: qdrant_dev
+      port: 6337
+      proto: http
+    - name: qdrant_grpc_dev
+      port: 6338
+      proto: grpc
+    - name: rabbitmq_mgmt_dev
+      port: 15673
+      proto: http
+    - name: rabbitmq_amqp_dev
+      port: 5673
+      proto: amqp

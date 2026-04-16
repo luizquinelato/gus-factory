@@ -1,0 +1,77 @@
+/* =================================================================
+   colors.css — Variáveis de cor universais do SaaS Blueprint V1
+   =================================================================
+   BRAND (--color-1..5):  sobreescritas em runtime pelo ThemeContext
+                          conforme o esquema e modo do usuário.
+   SEMANTIC:              fixas — representam significado universal.
+   ACTION ALIASES:        mapeiam ações CRUD para as cores semânticas.
+   ================================================================= */
+
+:root {
+
+  /* ── Brand colors — default; ThemeContext overrides at runtime ──
+     Espelham a paleta "default/light" do migration 0002.
+     São o fallback antes das cores do tenant serem carregadas.       */
+  --color-1: #1D4ED8;
+  --color-2: #1A1D2E;
+  --color-3: #BE185D;
+  --color-4: #475569;
+  --color-5: #A78BFA;
+
+  --on-color-1: #FFFFFF;
+  --on-color-2: #FFFFFF;
+  --on-color-3: #FFFFFF;
+  --on-color-4: #FFFFFF;
+  --on-color-5: #FFFFFF;
+
+  --on-gradient-1-2: #FFFFFF;
+  --on-gradient-2-3: #FFFFFF;
+  --on-gradient-3-4: #FFFFFF;
+  --on-gradient-4-5: #FFFFFF;
+  --on-gradient-5-1: #FFFFFF;
+
+  --gradient-1-2:   linear-gradient(135deg, var(--color-1), var(--color-2));
+  --gradient-2-3:   linear-gradient(135deg, var(--color-2), var(--color-3));
+  --gradient-3-4:   linear-gradient(135deg, var(--color-3), var(--color-4));
+  --gradient-4-5:   linear-gradient(135deg, var(--color-4), var(--color-5));
+  --gradient-5-1:   linear-gradient(135deg, var(--color-5), var(--color-1));
+  --gradient-full:  linear-gradient(135deg, var(--color-1), var(--color-2), var(--color-3), var(--color-4), var(--color-5));
+
+  /* ── Semantic colors — fixed, not user-customizable ────────────
+     Use these for universal meaning: feedback, status, alerts.    */
+  --color-success:  #22c55e;   /* confirmação, operação concluída  */
+  --on-color-success: #ffffff;
+
+  --color-danger:   #ef4444;   /* erro, operação destrutiva        */
+  --on-color-danger: #ffffff;
+
+  --color-warning:  #f59e0b;   /* atenção, ação com impacto        */
+  --on-color-warning: #ffffff;
+
+  --color-info:     #3b82f6;   /* informação, detalhe, visualizar  */
+  --on-color-info: #ffffff;
+
+  --color-neutral:  #6b7280;   /* ação secundária, cancelar        */
+  --on-color-neutral: #ffffff;
+
+  /* ── Action aliases — mapeiam CRUD para as cores semânticas ────
+     Use estes nos botões de ação para consistência visual.        */
+  --color-create:  var(--color-success);
+  --on-color-create: var(--on-color-success);
+
+  --color-save:    var(--color-1);          /* salvar → cor primária da marca */
+  --on-color-save: var(--on-color-1);
+
+  --color-update:  var(--color-1);          /* atualizar → cor primária da marca */
+  --on-color-update: var(--on-color-1);
+
+  --color-edit:    var(--color-warning);
+  --on-color-edit: var(--on-color-warning);
+
+  --color-delete:  var(--color-danger);
+  --on-color-delete: var(--on-color-danger);
+
+  --color-cancel:  var(--color-neutral);
+  --on-color-cancel: var(--on-color-neutral);
+
+}
