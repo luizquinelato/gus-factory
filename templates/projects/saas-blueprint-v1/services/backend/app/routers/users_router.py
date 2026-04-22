@@ -14,7 +14,7 @@ import uuid
 from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db_session
 from app.dependencies.auth import require_authentication
@@ -46,9 +46,9 @@ router = APIRouter()
 @router.get("/me", response_model=UserResponse)
 async def get_my_profile(
     current_user: Dict[str, Any] = Depends(require_authentication),
-    db: Session = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
-    user = get_user_by_id(db, current_user["id"], current_user["tenant_id"])
+    user = await get_user_by_id(db, current_user["id"], current_user["tenant_id"])
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuário não encontrado.")
     return UserResponse(**user)
@@ -58,14 +58,14 @@ async def get_my_profile(
 async def update_my_profile(
     body: UserUpdateRequest,
     current_user: Dict[str, Any] = Depends(require_authentication),
-    db: Session = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     if body.name:
-        success = update_user_profile(db, current_user["id"], current_user["tenant_id"], body.name)
+        success = await update_user_profile(db, current_user["id"], current_user["tenant_id"], body.name)
         if not success:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuário não encontrado.")
 
-    user = get_user_by_id(db, current_user["id"], current_user["tenant_id"])
+    user = await get_user_by_id(db, current_user["id"], current_user["tenant_id"])
     return UserResponse(**user)
 
 
@@ -73,12 +73,12 @@ async def update_my_profile(
 async def change_password(
     body: UserUpdateRequest,
     current_user: Dict[str, Any] = Depends(require_authentication),
-    db: Session = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     if not body.current_password or not body.new_password:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Preencha senha atual e nova senha.")
 
-    success = update_user_password(
+    success = await update_user_password(
         db, current_user["id"], current_user["tenant_id"], body.current_password, body.new_password
     )
     if not success:
@@ -91,9 +91,9 @@ async def change_password(
 async def update_preferences(
     body: UserPreferencesRequest,
     current_user: Dict[str, Any] = Depends(require_authentication),
-    db: Session = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
-    update_user_preferences(
+    await update_user_preferences(
         db,
         user_id=current_user["id"],
         tenant_id=current_user["tenant_id"],
@@ -110,7 +110,7 @@ async def update_preferences(
 async def upload_avatar(
     file: UploadFile = File(...),
     current_user: Dict[str, Any] = Depends(require_authentication),
-    db: Session = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     if file.content_type not in ALLOWED_TYPES:
         raise HTTPException(status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
@@ -130,7 +130,7 @@ async def upload_avatar(
     filepath = os.path.join(tenant_dir, filename)
 
     # Remove avatar anterior se existir
-    old_url = remove_user_avatar(db, current_user["id"], tenant_id)
+    old_url = await remove_user_avatar(db, current_user["id"], tenant_id)
     if old_url:
         old_path = _avatar_url_to_path(old_url)
         if os.path.exists(old_path):
@@ -140,7 +140,7 @@ async def upload_avatar(
         f.write(contents)
 
     avatar_url = f"{AVATARS_URL_PREFIX}/{tenant_id}/{filename}"
-    update_user_avatar(db, current_user["id"], tenant_id, avatar_url)
+    await update_user_avatar(db, current_user["id"], tenant_id, avatar_url)
     logger.info("Avatar updated for user_id=%s tenant_id=%s → %s", current_user["id"], tenant_id, avatar_url)
     return {"avatar_url": avatar_url}
 
@@ -148,9 +148,9 @@ async def upload_avatar(
 @router.delete("/me/avatar")
 async def delete_avatar(
     current_user: Dict[str, Any] = Depends(require_authentication),
-    db: Session = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
-    old_url = remove_user_avatar(db, current_user["id"], current_user["tenant_id"])
+    old_url = await remove_user_avatar(db, current_user["id"], current_user["tenant_id"])
     if old_url:
         old_path = _avatar_url_to_path(old_url)
         if os.path.exists(old_path):

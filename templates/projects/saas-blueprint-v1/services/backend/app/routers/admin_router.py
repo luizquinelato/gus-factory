@@ -4,18 +4,19 @@ admin_router.py
 Endpoints exclusivos para administradores do tenant.
 
 GET   /api/v1/admin/roles            → lista os roles do tenant
-PATCH /api/v1/admin/roles/{name}     → atualiza can_read/can_write/can_delete de um role
+PATCH /api/v1/admin/roles            → bulk update de capabilities (lista)
+PATCH /api/v1/admin/roles/{name}     → update de um único role
 GET   /api/v1/admin/pages            → lista todas as páginas e seus min_role
-PATCH /api/v1/admin/pages/{page_key} → atualiza o min_role de uma página
+PATCH /api/v1/admin/pages            → bulk update de min_role (lista)
+PATCH /api/v1/admin/pages/{page_key} → update de uma única página
 """
 import logging
-from typing import Any, Dict, List
-from typing import Literal
+from typing import Any, Dict, List, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import text
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db_session
 from app.dependencies.auth import require_admin
@@ -44,6 +45,13 @@ class RoleCapabilitiesUpdate(BaseModel):
     can_delete: bool
 
 
+class RoleBulkItem(BaseModel):
+    name: str
+    can_read: bool
+    can_write: bool
+    can_delete: bool
+
+
 class PageResponse(BaseModel):
     page_key: str
     label: str
@@ -56,15 +64,20 @@ class PageMinRoleUpdate(BaseModel):
     min_role: MinRole
 
 
+class PageBulkItem(BaseModel):
+    page_key: str
+    min_role: MinRole
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/roles", response_model=List[RoleResponse])
 async def list_roles(
     current_user: Dict[str, Any] = Depends(require_admin),
-    db: Session = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Lista os roles do tenant em ordem hierárquica."""
-    rows = db.execute(
+    result = await db.execute(
         text("""
             SELECT name, description, is_system, can_read, can_write, can_delete
             FROM roles
@@ -72,7 +85,8 @@ async def list_roles(
             ORDER BY CASE name WHEN 'admin' THEN 0 WHEN 'user' THEN 1 WHEN 'view' THEN 2 ELSE 9 END
         """),
         {"tid": current_user["tenant_id"]},
-    ).fetchall()
+    )
+    rows = result.fetchall()
     return [dict(r._mapping) for r in rows]
 
 
@@ -81,7 +95,7 @@ async def update_role_capabilities(
     name: str,
     body: RoleCapabilitiesUpdate,
     current_user: Dict[str, Any] = Depends(require_admin),
-    db: Session = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Atualiza can_read/can_write/can_delete de um role. Admin é protegido."""
     tenant_id = current_user["tenant_id"]
@@ -90,7 +104,7 @@ async def update_role_capabilities(
     if name == "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="O role admin não pode ser alterado.")
 
-    result = db.execute(
+    result = await db.execute(
         text("""
             UPDATE roles
             SET can_read = :cr, can_write = :cw, can_delete = :cd, last_updated_at = NOW()
@@ -101,7 +115,7 @@ async def update_role_capabilities(
     if result.rowcount == 0:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role não encontrado.")
 
-    db.commit()
+    await db.commit()
     logger.info("Role '%s' capabilities updated by user_id=%s tenant_id=%s", name, current_user["id"], tenant_id)
     return {"detail": f"Role '{name}' atualizado."}
 
@@ -109,10 +123,10 @@ async def update_role_capabilities(
 @router.get("/pages", response_model=List[PageResponse])
 async def list_pages(
     current_user: Dict[str, Any] = Depends(require_admin),
-    db: Session = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Lista todas as páginas do tenant com seus níveis de acesso."""
-    rows = db.execute(
+    result = await db.execute(
         text("""
             SELECT page_key, label, route, group_label, min_role
             FROM pages
@@ -120,8 +134,60 @@ async def list_pages(
             ORDER BY group_label NULLS FIRST, label
         """),
         {"tid": current_user["tenant_id"]},
-    ).fetchall()
+    )
+    rows = result.fetchall()
     return [dict(r._mapping) for r in rows]
+
+
+@router.patch("/roles", status_code=status.HTTP_200_OK)
+async def bulk_update_roles(
+    body: List[RoleBulkItem],
+    current_user: Dict[str, Any] = Depends(require_admin),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Atualiza capabilities de múltiplos roles em uma única transação."""
+    tenant_id = current_user["tenant_id"]
+    updated = 0
+    for item in body:
+        if item.name == "admin":
+            continue
+        result = await db.execute(
+            text("""
+                UPDATE roles
+                SET can_read = :cr, can_write = :cw, can_delete = :cd, last_updated_at = NOW()
+                WHERE tenant_id = :tid AND name = :name AND active = TRUE
+            """),
+            {"cr": item.can_read, "cw": item.can_write, "cd": item.can_delete,
+             "tid": tenant_id, "name": item.name},
+        )
+        updated += result.rowcount
+    await db.commit()
+    logger.info("Bulk roles update: %d rows by user_id=%s tenant_id=%s", updated, current_user["id"], tenant_id)
+    return {"updated": updated}
+
+
+@router.patch("/pages", status_code=status.HTTP_200_OK)
+async def bulk_update_pages(
+    body: List[PageBulkItem],
+    current_user: Dict[str, Any] = Depends(require_admin),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Atualiza min_role de múltiplas páginas em uma única transação."""
+    tenant_id = current_user["tenant_id"]
+    updated = 0
+    for item in body:
+        result = await db.execute(
+            text("""
+                UPDATE pages
+                SET min_role = :min_role, last_updated_at = NOW()
+                WHERE tenant_id = :tid AND page_key = :key AND active = TRUE
+            """),
+            {"min_role": item.min_role, "tid": tenant_id, "key": item.page_key},
+        )
+        updated += result.rowcount
+    await db.commit()
+    logger.info("Bulk pages update: %d rows by user_id=%s tenant_id=%s", updated, current_user["id"], tenant_id)
+    return {"updated": updated}
 
 
 @router.patch("/pages/{page_key}", status_code=status.HTTP_200_OK)
@@ -129,11 +195,11 @@ async def update_page_min_role(
     page_key: str,
     body: PageMinRoleUpdate,
     current_user: Dict[str, Any] = Depends(require_admin),
-    db: Session = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Atualiza o min_role de uma página (admin, user ou view)."""
     tenant_id = current_user["tenant_id"]
-    result = db.execute(
+    result = await db.execute(
         text("""
             UPDATE pages
             SET min_role = :min_role, last_updated_at = NOW()
@@ -143,7 +209,7 @@ async def update_page_min_role(
     )
     if result.rowcount == 0:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Página não encontrada.")
-    db.commit()
+    await db.commit()
     logger.info(
         "Page '%s' min_role updated to '%s' by user_id=%s tenant_id=%s",
         page_key, body.min_role, current_user["id"], tenant_id,

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { NavLink, useNavigate, useLocation } from 'react-router-dom'
-import { House, Palette, User, SignOut, Gear, CaretRight, CaretLeft, Sun, Moon, Article, FolderOpen, ShieldCheck, SquaresFour } from '@phosphor-icons/react'
+import { House, Palette, User, SignOut, Gear, CaretRight, CaretLeft, Sun, Moon, Article, FolderOpen, ShieldCheck, SquaresFour, ArrowSquareOut } from '@phosphor-icons/react'
 import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/useTheme'
 import apiClient from '../services/apiClient'
@@ -307,6 +307,43 @@ export default function Sidebar() {
 
   const isAdmin = user?.is_admin ?? false
 
+  // ── ETL link ─────────────────────────────────────────────────────────────────
+  // OTT é pré-gerado silenciosamente quando o admin loga (useEffect abaixo).
+  // Clique normal → instantâneo. Expirou (>25s) ou falhou → loading no botão.
+  // OTT de uso único: após consumir, pré-aquece o próximo em background.
+  // Clique-direito → "Abrir em nova aba" funciona via href no <a>.
+  const ETL_OTT_SAFE_TTL = 25_000  // margem de 5s antes dos 30s do backend
+  const etlBase = window.location.port === '5178' ? 'http://localhost:3345' : 'http://localhost:3344'
+  const [etlHref,    setEtlHref]    = useState('#')
+  const [etlHov,     setEtlHov]     = useState(false)
+  const [etlLoading, setEtlLoading] = useState(false)
+  // Refs espelham states — evita closure stale no onClick antes do re-render
+  const etlHrefRef    = useRef('#')
+  const etlGenAt      = useRef(0)               // timestamp da última geração bem-sucedida
+  // Promise ref: hover e click concorrentes compartilham o mesmo fetch em andamento
+  const etlGenPromise = useRef<Promise<void> | null>(null)
+
+  const generateEtlHref = useCallback((): Promise<void> => {
+    if (etlGenPromise.current) return etlGenPromise.current  // reutiliza fetch em andamento
+    etlGenPromise.current = apiClient.post('/auth/ott')
+      .then(({ data }) => {
+        const url = `${etlBase}?ott=${data.ott}`
+        etlHrefRef.current = url
+        etlGenAt.current   = Date.now()
+        setEtlHref(url)
+      })
+      .catch(() => {
+        etlHrefRef.current = '#'
+        etlGenAt.current   = 0
+        setEtlHref('#')
+      })
+      .finally(() => { etlGenPromise.current = null })
+    return etlGenPromise.current
+  }, [etlBase])
+
+  // Pré-gera OTT assim que o admin estiver autenticado — clique será instantâneo
+  useEffect(() => { if (isAdmin) generateEtlHref() }, [isAdmin, generateEtlHref])
+
   const toggleTheme = useCallback(() => {
     const next: typeof themeMode = isDark ? 'light' : 'dark'
     setThemeMode(next)
@@ -421,9 +458,63 @@ export default function Sidebar() {
           </div>
         )}
 
-        {/* Configurações — apenas admin */}
+        {/* ETL + Configurações — apenas admin */}
         {isAdmin && (
           <>
+            {/* ETL: <a> com href pré-gerado — permite clique normal (mesma aba)
+                e clique-direito → "Abrir em nova aba" do browser.
+                Loading exibido apenas se OTT expirou ou falhou na geração inicial. */}
+            <div style={{ position: 'relative' }}>
+              <a
+                href={etlHref}
+                onMouseEnter={() => setEtlHov(true)}
+                onMouseLeave={() => setEtlHov(false)}
+                onFocus={generateEtlHref}
+                onClick={async (e) => {
+                  e.preventDefault()
+                  if (etlLoading) return
+
+                  // OTT ausente ou expirado (> margem segura do TTL) → gera com loading
+                  const isStale = Date.now() - etlGenAt.current > ETL_OTT_SAFE_TTL
+                  if (etlHrefRef.current === '#' || isStale) {
+                    if (isStale) { etlHrefRef.current = '#'; etlGenAt.current = 0; setEtlHref('#') }
+                    setEtlLoading(true)
+                    await generateEtlHref()
+                    setEtlLoading(false)
+                  }
+
+                  const target = etlHrefRef.current
+                  // Consome OTT e pré-aquece o próximo silenciosamente (OTT é de uso único)
+                  etlHrefRef.current = '#'
+                  etlGenAt.current   = 0
+                  setEtlHref('#')
+                  if (target !== '#') {
+                    generateEtlHref()          // fire-and-forget para próximo clique/right-click
+                    window.location.href = target
+                  }
+                }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: collapsed ? '8px 0' : '8px 10px',
+                  justifyContent: collapsed ? 'center' : 'flex-start',
+                  width: '100%', borderRadius: 8,
+                  cursor: etlLoading ? 'wait' : 'pointer',
+                  pointerEvents: etlLoading ? 'none' : 'auto',
+                  opacity: etlLoading ? 0.65 : 1,
+                  background: etlHov && !etlLoading ? overlay : 'transparent',
+                  color: content, textDecoration: 'none',
+                  fontSize: 13, fontWeight: 500, transition: 'background .15s, opacity .15s',
+                }}
+              >
+                <ArrowSquareOut size={17} weight="regular" style={{ flexShrink: 0, color: etlLoading ? 'var(--color-1)' : muted }} />
+                {!collapsed && (
+                  <span style={{ flex: 1, textAlign: 'left' }}>
+                    {etlLoading ? 'Abrindo ETL…' : 'Módulo ETL'}
+                  </span>
+                )}
+              </a>
+              <Tooltip label={etlLoading ? 'Abrindo ETL…' : 'Módulo ETL'} visible={collapsed && etlHov} />
+            </div>
             <FooterBtn
               ref={settingsBtnRef}
               icon={Gear} label="Configurações" collapsed={collapsed}

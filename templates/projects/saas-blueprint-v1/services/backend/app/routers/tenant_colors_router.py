@@ -9,7 +9,7 @@ import logging
 from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db_session
 from app.dependencies.auth import require_admin, require_authentication
@@ -31,9 +31,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _get_threshold(db: Session, tenant_id: int) -> float:
+async def _get_threshold(db: AsyncSession, tenant_id: int) -> float:
     """Lê o threshold de contraste do tenant (padrão: 0.5)."""
-    val = get_system_setting(db, tenant_id, "color_contrast_threshold", "0.5")
+    val = await get_system_setting(db, tenant_id, "color_contrast_threshold", "0.5")
     try:
         return float(val)
     except ValueError:
@@ -43,13 +43,13 @@ def _get_threshold(db: Session, tenant_id: int) -> float:
 @router.get("/unified", response_model=UnifiedColorsResponse)
 async def get_unified_colors(
     current_user: Dict[str, Any] = Depends(require_authentication),
-    db: Session = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Retorna todas as 12 combinações: 2 modes × 2 themes × 3 WCAG levels."""
     tenant_id = current_user["tenant_id"]
-    threshold = _get_threshold(db, tenant_id)
-    all_colors = get_all_colors_unified(db, tenant_id, threshold)
-    schema_mode = get_tenant_color_schema_mode(db, tenant_id)
+    threshold = await _get_threshold(db, tenant_id)
+    all_colors = await get_all_colors_unified(db, tenant_id, threshold)
+    schema_mode = await get_tenant_color_schema_mode(db, tenant_id)
 
     return UnifiedColorsResponse(
         color_schema_mode=schema_mode,
@@ -61,7 +61,7 @@ async def get_unified_colors(
 async def save_unified_colors(
     body: UnifiedColorUpdate,
     current_user: Dict[str, Any] = Depends(require_admin),
-    db: Session = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Salva as cores custom e retorna as 12 combinações atualizadas."""
     tenant_id = current_user["tenant_id"]
@@ -75,10 +75,10 @@ async def save_unified_colors(
                     detail=f"'{label}' deve conter color1..color5.",
                 )
 
-    update_custom_colors(db, tenant_id, body.light_colors, body.dark_colors)
-    threshold = _get_threshold(db, tenant_id)
-    all_colors = get_all_colors_unified(db, tenant_id, threshold)
-    schema_mode = get_tenant_color_schema_mode(db, tenant_id)
+    await update_custom_colors(db, tenant_id, body.light_colors, body.dark_colors)
+    threshold = await _get_threshold(db, tenant_id)
+    all_colors = await get_all_colors_unified(db, tenant_id, threshold)
+    schema_mode = await get_tenant_color_schema_mode(db, tenant_id)
 
     return UnifiedColorsResponse(
         color_schema_mode=schema_mode,
@@ -90,7 +90,7 @@ async def save_unified_colors(
 async def switch_color_mode(
     body: ColorModeUpdate,
     current_user: Dict[str, Any] = Depends(require_admin),
-    db: Session = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Troca o color_schema_mode do tenant entre 'default' e 'custom'."""
     if body.mode not in ("default", "custom"):
@@ -98,5 +98,5 @@ async def switch_color_mode(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="mode deve ser 'default' ou 'custom'.",
         )
-    update_color_schema_mode(db, current_user["tenant_id"], body.mode)
+    await update_color_schema_mode(db, current_user["tenant_id"], body.mode)
     return {"detail": f"Modo atualizado para '{body.mode}'.", "color_schema_mode": body.mode}

@@ -279,3 +279,67 @@ async def validate_token(payload: TokenPayload):
 ```
 
 > **Regra:** endpoints do Auth Service que só devem ser chamados por outros serviços internos **sempre** usam `Depends(require_internal_key)`. Nunca exponha esses endpoints sem proteção.
+
+## 🪙 7. SSO para o ETL — One-Time Token (OTT)
+
+O frontend ETL não possui login próprio. O acesso é feito via **One-Time Token (OTT)**, um mecanismo SSO seguro que elimina a necessidade de re-autenticação e não expõe tokens ou URLs na barra de endereços.
+
+### Fluxo completo (acesso direto ao ETL)
+
+```
+1. Usuário abre http://localhost:3344/alguma-rota  (sem auth)
+      │
+      ▼
+2. ETL: sessionStorage.set('etl_return_path', '/alguma-rota')
+   ETL: redireciona → http://localhost:5177/login?etl=1
+      │  (URL limpa — sem porta ou token do ETL expostos)
+      ▼
+3. Usuário loga no frontend principal
+      │
+      ▼
+4. POST /api/v1/auth/ott  →  { ott, etl_url, ttl: 30 }
+   window.location = etl_url + '?ott=' + ott
+      │  (OTT removido da URL em ~1 frame pelo OttBootstrap)
+      ▼
+5. ETL troca OTT → POST /api/v1/auth/exchange-ott
+   Lê sessionStorage → navega para '/alguma-rota'
+   URL final: http://localhost:3344/alguma-rota  ✓
+```
+
+### Backend — endpoints
+
+```python
+# POST /api/v1/auth/ott
+# Requer autenticação + is_admin = true
+# Gera UUID, armazena {access_token, user, tenant_colors, client_ip} no Redis com TTL 30s
+# Retorna: { "ott": "<uuid>", "etl_url": "http://localhost:3344", "ttl": 30 }
+
+# POST /api/v1/auth/exchange-ott
+# Público (ponto de entrada do ETL) — rate limit 10/min
+# OTT de uso único: removido do Redis na primeira chamada
+# Retorna: mesmo shape do /auth/login (access_token, user, tenant_colors)
+```
+
+### Propriedades de segurança
+
+| Propriedade | Detalhe |
+|---|---|
+| **Uso único** | OTT é deletado do Redis na primeira troca (`get-and-delete`) |
+| **TTL curto** | 30 segundos — janela mínima para o redirecionamento |
+| **Fingerprint de IP** | `client_ip` é validado: OTT só funciona para o IP que o gerou |
+| **Admin only** | `POST /auth/ott` exige `is_admin = true` — usuários comuns não acessam o ETL |
+| **URL limpa** | `?etl=1` no login em vez de `?redirect=http://localhost:3344/...` |
+| **Token limpo** | OTT removido da URL por `window.history.replaceState` em ~1 frame |
+
+### sessionStorage como canal cross-redirect
+
+O ETL preserva o deep link em seu próprio `sessionStorage` (origin `localhost:3344`) antes de redirecionar ao login. O frontend principal **não precisa conhecer o path** — apenas gera o OTT e aponta para a raiz do ETL. Após a troca do OTT, o ETL lê o path salvo e navega internamente.
+
+```
+sessionStorage (ETL origin) ──► 'etl_return_path' = '/pipelines'
+                                       ↑ gravado antes do redirect
+                                       ↓ lido após exchange-ott
+navigate('/pipelines', { replace: true })  ← dentro do React Router
+```
+
+> **Regra:** nunca passe a URL completa do ETL como parâmetro de query (`?redirect=http://...`). Use sempre `?etl=1` + `sessionStorage`.

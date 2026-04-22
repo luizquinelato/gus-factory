@@ -1,0 +1,18 @@
+# =============================================================
+# requirements/install.txt — auth
+# =============================================================
+# Python packages to install for this service (pip format).
+# Used directly by scripts/setup_env.py → pip install -r this file.
+# Lines starting with # are ignored.
+# =============================================================
+
+fastapi
+uvicorn[standard]
+sqlalchemy
+psycopg2-binary
+pydantic-settings
+pydantic[email]
+python-jose[cryptography]
+bcrypt
+httpx
+

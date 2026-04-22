@@ -5,10 +5,16 @@ from app.routers.auth_router import router as auth_router
 from app.routers.users_router import router as users_router
 from app.routers.tenant_colors_router import router as colors_router
 from app.routers.admin_router import router as admin_router
+from app.routers.queues_router import router as queues_router
+from app.routers.workers_router import router as workers_router
+from app.routers.settings_router import router as settings_router
 
 api_router = APIRouter()
 api_router.include_router(health_router)
-api_router.include_router(auth_router,  prefix="/auth",         tags=["auth"])
-api_router.include_router(users_router, prefix="/users",        tags=["users"])
-api_router.include_router(colors_router,prefix="/tenant/colors",tags=["colors"])
-api_router.include_router(admin_router, prefix="/admin",        tags=["admin"])
+api_router.include_router(auth_router,     prefix="/auth",         tags=["auth"])
+api_router.include_router(users_router,    prefix="/users",        tags=["users"])
+api_router.include_router(colors_router,   prefix="/tenant/colors",tags=["colors"])
+api_router.include_router(admin_router,    prefix="/admin",        tags=["admin"])
+api_router.include_router(queues_router)   # prefix já definido no router
+api_router.include_router(workers_router)  # prefix já definido no router
+api_router.include_router(settings_router) # prefix já definido no router

@@ -59,3 +59,41 @@ class WorkerStatusManager:
             message={"type": "ETL_STATUS", "job_id": job_id, "status": status, "progress": progress}
         )
 ```
+
+## 🔑 4. Frontend ETL — Autenticação e Deep Link
+
+O frontend ETL (porta `3344` prod / `3345` dev) não tem login próprio. Todo acesso é feito via **One-Time Token (OTT)** gerado pelo backend após autenticação no frontend principal.
+
+### Fluxo de acesso direto a uma rota do ETL
+
+```
+Usuário abre http://localhost:3344/pipelines  (sem sessão)
+      │
+      ▼ OttBootstrap detecta: sem ?ott, sem token
+sessionStorage.set('etl_return_path', '/pipelines')
+window.location → http://localhost:5177/login?etl=1
+      │
+      ▼ Usuário loga
+POST /api/v1/auth/ott → { ott, etl_url: 'http://localhost:3344' }
+window.location → http://localhost:3344/?ott=<uuid>
+      │
+      ▼ OttBootstrap no ETL
+replaceState('/') → OTT removido da URL
+POST /auth/exchange-ott → sessão estabelecida
+sessionStorage.get('etl_return_path') → '/pipelines'
+useLayoutEffect → navigate('/pipelines')
+      │
+      ▼ URL final (sem flash de tela)
+http://localhost:3344/pipelines  ✓
+```
+
+### Regras do mecanismo
+
+- **`?etl=1`** é o único parâmetro passado ao login — sem URL do ETL ou porta expostas
+- O path desejado fica no `sessionStorage` do próprio ETL (origin isolado por porta)
+- O OTT é removido da URL pelo `window.history.replaceState` antes do primeiro paint
+- A navegação interna usa `useLayoutEffect` (antes do paint) → zero flash de tela
+- Em caso de 401 durante sessão ativa, o `apiClient` do ETL repete o mesmo fluxo, preservando o path atual no `sessionStorage`
+
+> Ver `05-security-auth.md` seção 7 para os detalhes dos endpoints e propriedades de segurança do OTT.
+> Ver `07-frontend-patterns.md` seção 13 para o código completo do `OttBootstrap`.

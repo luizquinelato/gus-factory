@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef } from 'react'
-import ReactDOM from 'react-dom'
-import { CheckCircle, Palette, PaintBrush, ArrowCounterClockwise, FloppyDisk } from '@phosphor-icons/react'
+import { toast } from 'sonner'
+import { Palette, PaintBrush, ArrowCounterClockwise, FloppyDisk } from '@phosphor-icons/react'
 import type { BaseColors } from '../utils/colorCalculations'
 import { buildColorVariant } from '../utils/colorCalculations'
 import ColorVariantsPreview from './ColorVariantsPreview'
@@ -91,8 +91,7 @@ export default function ColorCustomizerUnified({
 
   const [light,     setLight]     = useState<BaseColors>(isCustom ? customLightColors : defaultLightColors)
   const [dark,      setDark]      = useState<BaseColors>(isCustom ? customDarkColors  : defaultDarkColors)
-  const [saving,    setSaving]    = useState(false)
-  const [showToast, setShowToast] = useState(false)
+  const [saving, setSaving] = useState(false)
 
   // Referência dos valores custom vindos do banco (para dirty check de edição de cores)
   const dbLight = useRef<BaseColors>(customLightColors)
@@ -148,8 +147,9 @@ export default function ColorCustomizerUnified({
         dbDark.current  = dark
       }
 
-      setShowToast(true)
-      setTimeout(() => setShowToast(false), 3000)
+      toast.success('Cores salvas com sucesso!')
+    } catch {
+      toast.error('Erro ao salvar cores.')
     } finally { setSaving(false) }
   }
 
@@ -220,25 +220,6 @@ export default function ColorCustomizerUnified({
           </button>
         </div>
       </div>
-
-      {/* ── Toast de sucesso ── */}
-      {showToast && ReactDOM.createPortal(
-        <div style={{
-          position: 'fixed', top: 24, right: 24, zIndex: 9999,
-          display: 'flex', alignItems: 'center', gap: 10,
-          padding: '12px 20px', borderRadius: 12,
-          background: 'var(--color-success)',
-          color: 'var(--on-color-success)',
-          boxShadow: '0 4px 24px rgba(0,0,0,.18)',
-          fontSize: 14, fontWeight: 600,
-          animation: 'sbv1-toast-in 0.25s ease',
-        }}>
-          <style>{`@keyframes sbv1-toast-in { from { opacity:0; transform:translateY(-10px) } to { opacity:1; transform:translateY(0) } }`}</style>
-          <CheckCircle size={18} weight="bold" />
-          Cores salvas com sucesso!
-        </div>,
-        document.body,
-      )}
 
       {/* ── Color edit panels ── */}
       <section className="mb-6">

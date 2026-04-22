@@ -31,15 +31,28 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
     INTERNAL_API_KEY: str = ""
 
-    # Cache
-    REDIS_URL: str = "redis://localhost:6379/0"
+    # Cache — porta 6385 (prod saas-blueprint-v1), sobreposta pelo .env
+    REDIS_URL: str = "redis://localhost:6385/0"
+
+    # RabbitMQ
+    RABBITMQ_HOST: str = "localhost"
+    RABBITMQ_PORT: int = 5672
+    RABBITMQ_USER: str = "guest"
+    RABBITMQ_PASS: str = "guest"
+    RABBITMQ_MANAGEMENT_PORT: int = 15672
 
     # Auth service URL — sempre localhost (roda no host)
     AUTH_SERVICE_URL: str = "http://localhost:10100"
 
-    # CORS
+    # CORS — frontend principal (5177 prod / 5178 dev) + ETL (3344 prod / 3345 dev)
     FRONTEND_URL: str = "http://localhost:5177"
-    BACKEND_CORS_ORIGINS: list[str] = ["http://localhost:5177"]
+    ETL_FRONTEND_URL: str = "http://localhost:3344"
+    BACKEND_CORS_ORIGINS: list[str] = [
+        "http://localhost:5177",  # frontend prod
+        "http://localhost:5178",  # frontend dev
+        "http://localhost:3344",  # etl frontend prod
+        "http://localhost:3345",  # etl frontend dev
+    ]
 
     model_config = SettingsConfigDict(
         env_file=str(_env_file) if _env_file.exists() else None,
@@ -49,8 +62,17 @@ class Settings(BaseSettings):
 
     @property
     def database_url(self) -> str:
+        """URL síncrona — usada apenas pelo migration runner e scripts."""
         return (
             f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
+            f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DATABASE}"
+        )
+
+    @property
+    def async_database_url(self) -> str:
+        """URL assíncrona — usada pelo engine principal da aplicação (asyncpg)."""
+        return (
+            f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
             f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DATABASE}"
         )
 

@@ -8,9 +8,12 @@ from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from app.core.config import get_settings
 from app.core.database import ping_database
+from app.core.limiter import limiter
 from app.core.logging_config import setup_logging
 from app.routers import api_router
 
@@ -23,11 +26,36 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("🚀 Backend iniciando (env=%s)...", settings.ENVIRONMENT)
-    if ping_database():
+
+    # Database
+    if await ping_database():
         logger.info("✅ Database conectado.")
     else:
         logger.error("❌ Database NÃO conectado.")
+
+    # ETL Workers — declara filas e inicia pools
+    try:
+        from app.etl.queue_manager import QueueManager
+        from app.etl.worker_manager import WorkerManager
+
+        QueueManager.get_instance().declare_all_queues()
+        logger.info("✅ RabbitMQ filas declaradas.")
+
+        WorkerManager.get_instance().start_all()
+        logger.info("✅ ETL workers iniciados.")
+    except Exception as exc:
+        logger.warning("⚠️  ETL workers não iniciados (RabbitMQ indisponível?): %s", exc)
+
     yield
+
+    # Shutdown — para todos os workers graciosamente
+    try:
+        from app.etl.worker_manager import WorkerManager
+        WorkerManager.get_instance().stop()
+        logger.info("⏹ ETL workers parados.")
+    except Exception:
+        pass
+
     logger.info("🛑 Backend encerrando.")
 
 
@@ -36,6 +64,10 @@ app = FastAPI(
     version=settings.VERSION,
     lifespan=lifespan,
 )
+
+# ── Rate limiting ──────────────────────────────────────────────────────────────
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
 origins = settings.BACKEND_CORS_ORIGINS
