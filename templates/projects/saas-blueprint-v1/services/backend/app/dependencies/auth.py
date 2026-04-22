@@ -4,7 +4,7 @@ from typing import Any, Dict
 import httpx
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy import text
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.database import get_db_session
@@ -55,20 +55,21 @@ def require_page_access(page_key: str):
     3. Compara role_level(user.role) >= role_level(page.min_role)
     4. Página não cadastrada no banco → acesso liberado (fail-open seguro para o blueprint)
     """
-    def checker(
+    async def checker(
         current_user: Dict = Depends(require_authentication),
-        db: Session = Depends(get_db_session),
+        db: AsyncSession = Depends(get_db_session),
     ):
         if current_user.get("is_admin"):
             return current_user
 
-        role      = current_user.get("role", "view")
+        role = current_user.get("role", "view")
         tenant_id = current_user["tenant_id"]
 
-        row = db.execute(
+        result = await db.execute(
             text("SELECT min_role FROM pages WHERE tenant_id = :tid AND page_key = :key AND active = TRUE"),
             {"tid": tenant_id, "key": page_key},
-        ).fetchone()
+        )
+        row = result.fetchone()
 
         if row is None:
             return current_user  # página não cadastrada → acesso liberado

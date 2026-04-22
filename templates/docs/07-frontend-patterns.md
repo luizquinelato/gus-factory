@@ -712,8 +712,9 @@ export default function QuantumBackground() {
 // Glassmorphism card sobre canvas animado — referência: gus-pulse LoginPage.tsx
 import { motion } from 'framer-motion'
 import React, { useState } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import apiClient from '../services/apiClient'
 import QuantumBackground from '../components/QuantumBackground'
 
 export default function LoginPage() {
@@ -722,14 +723,26 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const { login, isAuthenticated } = useAuth()
+  const location = useLocation()
+
+  // ?etl=1 → usuário veio do ETL; o path desejado está no sessionStorage do ETL
+  const isEtlRedirect = new URLSearchParams(location.search).get('etl') === '1'
 
   if (isAuthenticated) return <Navigate to="/home" replace />
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setError(''); setIsLoading(true)
     try {
-      const ok = await login(email, password)
-      if (!ok) setError('Email ou senha inválidos.')
+      await login(email, password)
+
+      if (isEtlRedirect) {
+        // Gera OTT e abre a raiz do ETL — o ETL lê sessionStorage para o deep link
+        const { data } = await apiClient.post<{ ott: string; etl_url: string }>('/auth/ott')
+        window.location.href = `${data.etl_url}?ott=${data.ott}`
+        return
+      }
+
+      // Login normal → home do frontend principal
     } catch { setError('Falha ao entrar. Tente novamente.')
     } finally { setIsLoading(false) }
   }
@@ -1072,3 +1085,114 @@ const createUser = useCreateUser()
 
 > **Regra:** Use `useQuery` para qualquer dado que vem da API e é exibido em UI.
 > Use `useState + useEffect` apenas para estado local puro (sem servidor).
+
+---
+
+## 🔑 13. ETL Frontend — Padrão OttBootstrap
+
+O frontend ETL não possui login próprio. A autenticação é feita via **One-Time Token (OTT)** gerado pelo backend após login no frontend principal. O componente `OttBootstrap` encapsula toda essa lógica.
+
+### Fluxo de acesso direto (deep link)
+
+Quando o usuário acessa diretamente uma URL do ETL (ex: `/pipelines`) sem sessão ativa:
+
+1. ETL salva o path atual em `sessionStorage` (origin do ETL) e redireciona para `/login?etl=1`
+2. Usuário loga → `LoginPage` vê `?etl=1` → chama `POST /auth/ott` → redireciona para raiz do ETL com `?ott=<uuid>`
+3. `OttBootstrap` detecta `?ott`, remove da URL imediatamente, troca pelo token, lê `sessionStorage`
+4. `useLayoutEffect` navega para o path original antes do primeiro paint — sem flash de tela
+
+### OttBootstrap — estrutura canônica
+
+```tsx
+// src/App.tsx (frontend-etl)
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from './contexts/AuthContext'
+import apiClient from './services/apiClient'
+import { storage } from './utils/storage'
+
+const MAIN_FRONTEND = window.location.port === '3345'
+  ? 'http://localhost:5178'
+  : 'http://localhost:5177'
+
+const ETL_RETURN_PATH_KEY = 'etl_return_path'
+
+function OttBootstrap({ children }: { children: React.ReactNode }) {
+  const { setSession } = useAuth()
+  const navigate = useNavigate()           // disponível pois BrowserRouter está no main.tsx
+  const [ready, setReady] = useState(false)
+  const ran = useRef(false)                // guard: OTT é de uso único
+  const returnPathRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (ran.current) return
+    ran.current = true
+
+    const ott = new URLSearchParams(window.location.search).get('ott')
+
+    if (ott) {
+      // Remove OTT da URL antes mesmo de fazer a troca (segurança)
+      window.history.replaceState({}, '', window.location.pathname)
+      apiClient.post('/auth/exchange-ott', { ott })
+        .then(({ data }) => {
+          setSession(data.access_token, data.user, data.tenant_colors)
+          const saved = sessionStorage.getItem(ETL_RETURN_PATH_KEY)
+          sessionStorage.removeItem(ETL_RETURN_PATH_KEY)
+          if (saved && saved !== '/') returnPathRef.current = saved
+          setReady(true)
+        })
+        .catch(() => {
+          sessionStorage.removeItem(ETL_RETURN_PATH_KEY)
+          window.location.href = `${MAIN_FRONTEND}/login`
+        })
+      return
+    }
+
+    if (storage.getToken() && storage.getUser()) {
+      setReady(true)
+    } else {
+      // Salva o path atual — sem expor URL/porta na barra de endereços
+      sessionStorage.setItem(ETL_RETURN_PATH_KEY, window.location.pathname + window.location.search)
+      window.location.href = `${MAIN_FRONTEND}/login?etl=1`
+    }
+  }, [setSession])
+
+  // useLayoutEffect: navega antes do primeiro paint → sem flash da home page
+  useLayoutEffect(() => {
+    if (ready && returnPathRef.current) {
+      const path = returnPathRef.current
+      returnPathRef.current = null
+      navigate(path, { replace: true })
+    }
+  }, [ready, navigate])
+
+  if (!ready) return <Loading />
+  return <>{children}</>
+}
+```
+
+### apiClient do ETL — 401 com deep link
+
+```typescript
+// src/services/apiClient.ts (frontend-etl)
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const req = error.config as AxiosRequestConfig & { _retry?: boolean }
+    if (error.response?.status === 401 && !req._retry) {
+      req._retry = true
+      storage.removeToken(); storage.removeUser(); storage.removeTenantColors()
+      // Preserva o path atual para restaurar após re-autenticação
+      sessionStorage.setItem('etl_return_path', window.location.pathname + window.location.search)
+      window.location.href = `${MAIN_FRONTEND}/login?etl=1`
+    }
+    return Promise.reject(error)
+  },
+)
+```
+
+### Por que `useLayoutEffect` e não `useEffect`?
+
+`useEffect` roda **após** o browser pintar a tela — o usuário veria um flash da home page (`/`) antes de ser redirecionado. `useLayoutEffect` roda **antes** do paint, na fase de commit do React, eliminando o flash completamente.
+
+> **Regra:** nunca use `?redirect=http://localhost:3344/path` na URL de login. Sempre use `?etl=1` + `sessionStorage` para manter as URLs limpas e sem exposição de porta ou token.

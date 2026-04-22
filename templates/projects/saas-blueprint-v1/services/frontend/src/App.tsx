@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useCallback } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
@@ -15,7 +15,23 @@ import Menu22Page from './pages/Menu22Page'
 import RolesPage from './pages/RolesPage'
 import PagesPage from './pages/PagesPage'
 import apiClient from './services/apiClient'
-import type { ThemeMode, ColorSchemaMode, ColorScheme } from './types'
+import type { ThemeMode, ColorSchemaMode, ColorScheme, User } from './types'
+
+/**
+ * Detecta ?force_logout=1 na URL — enviado pelo ETL ao fazer logout.
+ * Limpa a sessão do frontend principal imediatamente, sem esperar o token expirar.
+ */
+function ForceLogoutHandler() {
+  const { logout } = useAuth()
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('force_logout') === '1') {
+      window.history.replaceState({}, '', window.location.pathname)
+      logout()
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  return null
+}
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth()
@@ -41,6 +57,40 @@ function DevTitleEffect() {
       document.title = `[DEV] ${document.title}`
     }
   }, [])
+  return null
+}
+
+/**
+ * Sincroniza theme_mode com o banco.
+ * - Roda no mount e sempre que a aba volta ao foco (visibilitychange).
+ * - Suprime transições CSS durante a correção para evitar flash visível.
+ */
+function UserRefresher() {
+  const { updateUser } = useAuth()
+  const { setThemeMode } = useTheme()
+
+  const syncTheme = useCallback(async () => {
+    try {
+      const { data } = await apiClient.get<User>('/users/me')
+      // Suprime transições durante a sincronização → sem "piscar"
+      const style = document.createElement('style')
+      style.innerHTML = '*,*::before,*::after{transition:none!important;animation-duration:0s!important}'
+      document.head.appendChild(style)
+      setThemeMode(data.theme_mode as ThemeMode)
+      updateUser({ theme_mode: data.theme_mode })
+      // Remove após dois frames — browser já repintou com o novo tema
+      requestAnimationFrame(() => requestAnimationFrame(() => style.remove()))
+    } catch {}
+  }, [setThemeMode, updateUser]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    syncTheme()
+    // Re-sincroniza ao voltar para esta aba — captura mudanças feitas no outro frontend
+    const onVisible = () => { if (document.visibilityState === 'visible') syncTheme() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [syncTheme])
+
   return null
 }
 
@@ -77,6 +127,7 @@ function AuthenticatedApp() {
       initialTheme={initialTheme}
     >
       {/* Atualiza cores do banco em background sem bloquear o render */}
+      <UserRefresher />
       <ColorRefresher />
       {/* Prefixes browser tab title with [DEV] in dev mode */}
       <DevTitleEffect />
@@ -100,8 +151,10 @@ function AuthenticatedApp() {
 export default function App() {
   return (
     <AuthProvider>
+      {/* Limpa sessão imediatamente se o ETL redirecionou com ?force_logout=1 */}
+      <ForceLogoutHandler />
       {/* Toast global — posicionado fora do ThemeProvider para ser sempre visível */}
-      <Toaster position="top-right" richColors closeButton />
+      <Toaster position="top-right" closeButton />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route

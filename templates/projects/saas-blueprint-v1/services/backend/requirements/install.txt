@@ -9,6 +9,7 @@
 fastapi
 uvicorn[standard]
 sqlalchemy
+asyncpg
 psycopg2-binary
 pydantic-settings
 pydantic[email]
@@ -19,3 +20,4 @@ redis
 pika
 python-dotenv
 python-multipart
+slowapi

@@ -25,7 +25,8 @@
 #             gus ratp [proj...] | all  -- nova janela por projeto
 #             gus back|auth|front|etl [proj...] | all
 #
-# NAV         gus cdb|cdbs|cda|cdf|cde {proj|proj-dev}
+# NAV         gus cd [--back|--front|--auth|--etl|--scripts] {proj|proj-dev}
+#             gus cd --factory | --blueprint
 #
 # Novos projetos em ports.yml funcionam automaticamente.
 # =================================================================
@@ -197,8 +198,8 @@ function _gus-docker-logs-tab {
     }
 }
 
-# --- Navigation (cdb / cdbs / cda / cdf / cde) --------------------
-function _gus-cd2 {
+# --- Navigation (gus cd) ------------------------------------------
+function _gus-cd {
     param([string]$dest, [string]$arg, [hashtable]$all)
     $proj = $arg
     if ($arg -match '^(.+)-dev$') { $proj = $Matches[1] }
@@ -578,7 +579,7 @@ function _gus-help {
     Write-Host "    gus venvs [proj...] | all              Instala/atualiza todos os venvs"
     Write-Host "    gus venvs [proj...] --force            Recria venvs do zero"
     Write-Host "    gus venvs [proj...] --backend          Somente backend"
-    Write-Host "    gus venvs [proj...] --auth             Somente auth-service"
+    Write-Host "    gus venvs [proj...] --auth             Somente auth"
     Write-Host "    gus venvs [proj...] --frontend         Somente frontend"
     Write-Host "    gus venvs [proj...] --frontend-etl     Somente frontend-etl"
     Write-Host ""
@@ -586,17 +587,20 @@ function _gus-help {
     Write-Host "    gus rat  [proj...]   back + auth + front + etl (abas, janela atual)"
     Write-Host "    gus ratp [proj...]   nova janela WT por projeto com todos os servicos"
     Write-Host "    gus back [proj...]   aba do backend"
-    Write-Host "    gus auth [proj...]   aba do auth-service"
+    Write-Host "    gus auth [proj...]   aba do auth"
     Write-Host "    gus front [proj...]  aba do frontend"
     Write-Host "    gus etl  [proj...]   aba do ETL frontend"
     Write-Host ""
     Write-Host "  NAV  (muda diretorio na aba atual)" -ForegroundColor White
-    Write-Host "    gus cdb  {proj|proj-dev}   cd para services/backend*"
-    Write-Host "    gus cdbs {proj|proj-dev}   cd para services/backend*/scripts"
-    Write-Host "    gus cda  {proj|proj-dev}   cd para services/auth*"
-    Write-Host "    gus cdf  {proj|proj-dev}   cd para services/frontend*"
-    Write-Host "    gus cde  {proj|proj-dev}   cd para services/etl*"
-    Write-Host "    gus list                   lista projetos com portas"
+    Write-Host "    gus cd           {proj|proj-dev}  cd para raiz do projeto"
+    Write-Host "    gus cd --back    {proj|proj-dev}  cd para services/backend*"
+    Write-Host "    gus cd --scripts {proj|proj-dev}  cd para services/backend*/scripts"
+    Write-Host "    gus cd --auth    {proj|proj-dev}  cd para services/auth*"
+    Write-Host "    gus cd --front   {proj|proj-dev}  cd para services/frontend*"
+    Write-Host "    gus cd --etl     {proj|proj-dev}  cd para services/etl*"
+    Write-Host "    gus cd --factory                  cd para raiz do gus-factory"
+    Write-Host "    gus cd --blueprint                cd para templates/projects/saas-blueprint-v1"
+    Write-Host "    gus list                          lista projetos com portas"
     Write-Host ""
     Write-Host "  CLEANUP  (requer Qdrant/RabbitMQ em extra_ports do projeto)" -ForegroundColor White
     Write-Host "    gus qdc  {proj|proj-dev}   Delete todas as Qdrant collections"
@@ -625,8 +629,9 @@ function _gus-help {
     Write-Host "    gus rat pulse-dev            # abre 3 abas pulse DEV"
     Write-Host "    gus ratp saas-blueprint-v1 pulse  # nova janela por projeto"
     Write-Host "    gus back pulse-dev           # aba backend pulse DEV"
-    Write-Host "    gus cdb pulse-dev            # cd para backend do pulse DEV"
-    Write-Host "    gus cdbs saas-blueprint-v1   # cd para backend/scripts do saas-blueprint-v1"
+    Write-Host "    gus cd pulse-dev             # cd para raiz do pulse DEV"
+    Write-Host "    gus cd --back pulse-dev      # cd para backend do pulse DEV"
+    Write-Host "    gus cd --scripts saas-blueprint-v1  # cd para backend/scripts do saas-blueprint-v1"
     Write-Host ""
     Write-Host "  Fonte da verdade: helms/ports.yml" -ForegroundColor DarkGray
     Write-Host ""
@@ -743,11 +748,37 @@ function gus {
         }
 
         # ── Navegacao ─────────────────────────────────────────────────
-        'cdb'  { if ($rest.Count -eq 0) { Write-Host "[gus] Uso: gus cdb  {proj|proj-dev}" -ForegroundColor Yellow; return }; _gus-cd2 'back'  $rest[0] $all }
-        'cdbs' { if ($rest.Count -eq 0) { Write-Host "[gus] Uso: gus cdbs {proj|proj-dev}" -ForegroundColor Yellow; return }; _gus-cd2 'backs' $rest[0] $all }
-        'cda'  { if ($rest.Count -eq 0) { Write-Host "[gus] Uso: gus cda  {proj|proj-dev}" -ForegroundColor Yellow; return }; _gus-cd2 'auth'  $rest[0] $all }
-        'cdf'  { if ($rest.Count -eq 0) { Write-Host "[gus] Uso: gus cdf  {proj|proj-dev}" -ForegroundColor Yellow; return }; _gus-cd2 'front' $rest[0] $all }
-        'cde'  { if ($rest.Count -eq 0) { Write-Host "[gus] Uso: gus cde  {proj|proj-dev}" -ForegroundColor Yellow; return }; _gus-cd2 'etl'   $rest[0] $all }
+        'cd' {
+            # Separa flags (--back, --front, etc.) do argumento de projeto
+            $flag    = $rest | Where-Object { $_ -like '--*' } | Select-Object -First 1
+            $projArg = $rest | Where-Object { $_ -notlike '--*' } | Select-Object -First 1
+
+            # --factory e --blueprint nao precisam de projeto
+            switch ($flag) {
+                '--factory' {
+                    Set-Location $GUS_BLUEPRINT
+                    Write-Host "[gus] $GUS_BLUEPRINT" -ForegroundColor Cyan
+                    return
+                }
+                '--blueprint' {
+                    $bp = Join-Path $GUS_BLUEPRINT "templates\projects\saas-blueprint-v1"
+                    if (Test-Path $bp) { Set-Location $bp; Write-Host "[gus] $bp" -ForegroundColor Cyan }
+                    else { Write-Host "[gus] Blueprint nao encontrado: $bp" -ForegroundColor Yellow }
+                    return
+                }
+            }
+
+            if (-not $projArg) { Write-Host "[gus] Uso: gus cd [--back|--front|--auth|--etl|--scripts] {proj|proj-dev}" -ForegroundColor Yellow; return }
+            $dest = switch ($flag) {
+                '--back'    { 'back'  }
+                '--scripts' { 'backs' }
+                '--auth'    { 'auth'  }
+                '--front'   { 'front' }
+                '--etl'     { 'etl'   }
+                default     { 'root'  }
+            }
+            _gus-cd $dest $projArg $all
+        }
 
         # ── Venvs ─────────────────────────────────────────────────────
         'venvs' {

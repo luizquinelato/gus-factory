@@ -8,6 +8,6 @@
 # =============================================================
 
 services/backend/requirements/install.txt
-services/auth-service/requirements/install.txt
+services/auth/requirements/install.txt
 services/frontend/package.json
 services/frontend-etl/package.json

@@ -1,8 +1,9 @@
 import React, { useState, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { Eye, EyeSlash } from '@phosphor-icons/react'
 import QuantumBackground from '../components/QuantumBackground'
 import { useAuth } from '../contexts/AuthContext'
+import apiClient from '../services/apiClient'
 
 /* ─── Animação rise (card sobe ao aparecer) ─── */
 const riseKeyframes = `
@@ -14,7 +15,11 @@ const riseKeyframes = `
 
 export default function LoginPage() {
   const navigate  = useNavigate()
+  const location  = useLocation()
   const { login } = useAuth()
+
+  // ?etl=1 → usuário veio do ETL; o path desejado está no sessionStorage do ETL
+  const isEtlRedirect = new URLSearchParams(location.search).get('etl') === '1'
 
   const [email,    setEmail]    = useState('')
   const [password, setPassword] = useState('')
@@ -31,6 +36,14 @@ export default function LoginPage() {
     setLoading(true)
     try {
       await login(email, password)
+
+      if (isEtlRedirect) {
+        // Gera OTT e abre a raiz do ETL — o ETL lê o sessionStorage para o deep link
+        const { data } = await apiClient.post<{ ott: string; etl_url: string }>('/auth/ott')
+        window.location.href = `${data.etl_url}?ott=${data.ott}`
+        return
+      }
+
       navigate('/', { replace: true })
     } catch (err: unknown) {
       const msg =

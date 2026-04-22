@@ -140,11 +140,10 @@ export default function PagesPage() {
 
   async function handleSaveAll() {
     const changed = pages.filter(p => draft[p.page_key] !== p.min_role)
+    if (changed.length === 0) return
     setSaving(true)
     try {
-      await Promise.all(
-        changed.map(p => apiClient.patch(`/admin/pages/${p.page_key}`, { min_role: draft[p.page_key] }))
-      )
+      await apiClient.patch('/admin/pages', changed.map(p => ({ page_key: p.page_key, min_role: draft[p.page_key] })))
       setPages(prev => prev.map(p => ({ ...p, min_role: draft[p.page_key] ?? p.min_role })))
       toast.success('Alterações salvas.')
     } catch {

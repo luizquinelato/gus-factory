@@ -126,11 +126,10 @@ export default function RolesPage() {
 
   async function handleSaveAll() {
     const changed = roles.filter(r => isDirty(r, draft))
+    if (changed.length === 0) return
     setSaving(true)
     try {
-      await Promise.all(
-        changed.map(r => apiClient.patch(`/admin/roles/${r.name}`, draft[r.name]))
-      )
+      await apiClient.patch('/admin/roles', changed.map(r => ({ name: r.name, ...draft[r.name] })))
       setRoles(prev => prev.map(r => ({ ...r, ...draft[r.name] })))
       toast.success('Alterações salvas.')
     } catch {
@@ -241,6 +240,7 @@ export default function RolesPage() {
         </p>
       </section>
       </div>
+
 
     </div>
   )

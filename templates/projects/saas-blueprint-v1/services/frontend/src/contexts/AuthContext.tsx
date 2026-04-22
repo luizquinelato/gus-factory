@@ -51,16 +51,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const logout = useCallback(() => {
-    const refreshToken = storage.getRefreshToken()
-    if (refreshToken) {
-      // Fire-and-forget: invalida o refresh token no servidor
-      apiClient.post('/auth/logout', { refresh_token: refreshToken }).catch(() => {})
-    }
+    // Captura o token ANTES de limpar o storage.
+    // O interceptor do Axios roda assincronamente (microtask) — se limpássemos
+    // primeiro, storage.getToken() retornaria null e o header Authorization
+    // não seria enviado, impedindo a invalidação da sessão no servidor.
+    const token = storage.getToken()
+
     storage.removeToken()
     storage.removeRefreshToken()
     storage.removeUser()
     storage.removeTenantColors()
     setState({ token: null, user: null, tenantColors: null, isAuthenticated: false })
+
+    if (token) {
+      // Fire-and-forget com Authorization explícito — bypass do interceptor.
+      apiClient.post('/auth/logout', {}, {
+        headers: { Authorization: `Bearer ${token}` },
+      }).catch(() => {})
+    }
   }, [])
 
   const updateUser = useCallback((partial: Partial<User>) => {

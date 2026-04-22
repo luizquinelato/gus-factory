@@ -15,7 +15,7 @@ import re
 from typing import Any, Dict, List
 
 from sqlalchemy import text
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.color_calculation_service import ColorCalculationService
 
@@ -41,8 +41,8 @@ def _sanitize_hex(raw: str) -> str:
     return v.upper()
 
 
-def get_all_colors_unified(
-    db: Session, tenant_id: int, threshold: float = 0.5
+async def get_all_colors_unified(
+    db: AsyncSession, tenant_id: int, threshold: float = 0.5
 ) -> List[Dict[str, Any]]:
     """Retorna as 12 linhas pré-computadas do DB.
 
@@ -52,7 +52,7 @@ def get_all_colors_unified(
     `threshold` não é mais usado (cálculo já ocorreu no save). Mantido por
     compatibilidade de assinatura com chamadores existentes.
     """
-    rows = db.execute(
+    result = await db.execute(
         text(
             f"SELECT color_schema_mode, theme_mode, accessibility_level, {_COLOR_COLS} "
             "FROM tenant_colors "
@@ -60,7 +60,8 @@ def get_all_colors_unified(
             "ORDER BY color_schema_mode, theme_mode, accessibility_level"
         ),
         {"tid": tenant_id},
-    ).fetchall()
+    )
+    rows = result.fetchall()
 
     if not rows:
         logger.warning("Nenhuma cor encontrada para tenant=%s", tenant_id)
@@ -69,8 +70,8 @@ def get_all_colors_unified(
     return [dict(r._mapping) for r in rows]
 
 
-def update_custom_colors(
-    db: Session,
+async def update_custom_colors(
+    db: AsyncSession,
     tenant_id: int,
     light_colors: Dict[str, str],
     dark_colors: Dict[str, str],
@@ -98,7 +99,7 @@ def update_custom_colors(
 
         for level_data in levels:
             access_level = level_data["accessibility_level"]
-            db.execute(
+            await db.execute(
                 text(
                     "INSERT INTO tenant_colors ("
                     "  tenant_id, color_schema_mode, theme_mode, accessibility_level,"
@@ -140,38 +141,40 @@ def update_custom_colors(
                 },
             )
 
-    db.commit()
+    await db.commit()
     logger.info("Custom colors updated for tenant=%s (6 rows: 2 themes × 3 WCAG levels)", tenant_id)
 
 
-def update_color_schema_mode(db: Session, tenant_id: int, mode: str) -> None:
+async def update_color_schema_mode(db: AsyncSession, tenant_id: int, mode: str) -> None:
     """Atualiza color_schema_mode do tenant ('default' | 'custom')."""
-    db.execute(
+    await db.execute(
         text(
             "UPDATE tenants SET color_schema_mode = :mode, last_updated_at = NOW() "
             "WHERE id = :tid"
         ),
         {"mode": mode, "tid": tenant_id},
     )
-    db.commit()
+    await db.commit()
     logger.info("color_schema_mode updated: tenant=%s mode=%s", tenant_id, mode)
 
 
-def get_tenant_color_schema_mode(db: Session, tenant_id: int) -> str:
+async def get_tenant_color_schema_mode(db: AsyncSession, tenant_id: int) -> str:
     """Retorna o color_schema_mode atual do tenant."""
-    row = db.execute(
+    result = await db.execute(
         text("SELECT color_schema_mode FROM tenants WHERE id = :tid"), {"tid": tenant_id}
-    ).fetchone()
+    )
+    row = result.fetchone()
     return row.color_schema_mode if row else "default"
 
 
-def get_system_setting(db: Session, tenant_id: int, key: str, default: str = "0.5") -> str:
+async def get_system_setting(db: AsyncSession, tenant_id: int, key: str, default: str = "0.5") -> str:
     """Lê um valor de system_settings."""
-    row = db.execute(
+    result = await db.execute(
         text(
             "SELECT setting_value FROM system_settings "
             "WHERE tenant_id = :tid AND setting_key = :key AND active = TRUE"
         ),
         {"tid": tenant_id, "key": key},
-    ).fetchone()
+    )
+    row = result.fetchone()
     return row.setting_value if row else default

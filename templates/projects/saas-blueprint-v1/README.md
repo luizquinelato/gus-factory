@@ -66,7 +66,7 @@ python services/backend/scripts/migration_runner.py --rollback-to 0000 --confirm
 
 ```bash
 # Auth Service — DEV (porta 10110)
-cd services/auth-service
+cd services/auth
 $env:APP_ENV="dev"
 .\.venv\Scripts\python -m uvicorn app.main:app --reload --port 10110
 
@@ -98,7 +98,7 @@ npm run dev
 ├── docs/               # Documentação técnica
 ├── scripts/            # Scripts utilitários (setup_venvs.py)
 ├── services/
-│   ├── auth-service/   # Serviço de autenticação (JWT)
+│   ├── auth/           # Serviço de autenticação (JWT)
 │   ├── backend/        # API principal (FastAPI)
 │   └── frontend/       # SPA React (Vite + TypeScript)
 ├── .env.dev            # Variáveis DEV (não commitar)
