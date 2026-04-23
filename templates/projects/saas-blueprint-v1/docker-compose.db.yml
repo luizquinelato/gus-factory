@@ -6,7 +6,7 @@
 # Copied to the project root by scripts/switch_postgres_variant.py.
 # To switch variants: `python scripts/switch_postgres_variant.py regular`
 
-name: gus-factory-saas-blueprint-v1
+name: gus-saas-blueprint-v1
 
 services:
 
@@ -104,9 +104,9 @@ services:
       - "5675:5672"
       - "15675:15672"
     environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
-      RABBITMQ_DEFAULT_VHOST: /
+      RABBITMQ_DEFAULT_USER: saas_blueprint_v1
+      RABBITMQ_DEFAULT_PASS: saas_blueprint_v1
+      RABBITMQ_DEFAULT_VHOST: saas_blueprint_v1_etl
     volumes:
       - rabbitmq_data_prod:/var/lib/rabbitmq
     networks:

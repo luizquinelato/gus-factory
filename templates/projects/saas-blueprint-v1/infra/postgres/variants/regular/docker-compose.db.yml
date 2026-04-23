@@ -6,7 +6,7 @@
 # Copied to the project root by scripts/switch_postgres_variant.py.
 # To switch variants: `python scripts/switch_postgres_variant.py regular`
 
-name: gus-factory-saas-blueprint-v1
+name: gus-saas-blueprint-v1
 
 services:
 

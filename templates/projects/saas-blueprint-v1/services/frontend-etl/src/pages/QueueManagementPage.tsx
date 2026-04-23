@@ -11,7 +11,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  ArrowClockwise, ArrowFatLinesDown,
+  ArrowClockwise, ArrowFatLinesDown, ArrowSquareOut,
   CheckCircle, Cpu, Flask, Funnel, Gear, Info,
   Lightning, Play, PlugsConnected, Skull, Square, Warning, X,
 } from '@phosphor-icons/react'
@@ -219,6 +219,11 @@ export default function QueueManagementPage() {
   const allWorkersAlive = workers != null &&
     WORKER_TYPES.every(t => (workers[t]?.alive ?? 0) > 0)
 
+  // ── rabbitmq management url ───────────────────────────────────────────────
+  const rabbitMgmtUrl = window.location.port === '3345'
+    ? 'http://localhost:15674'
+    : 'http://localhost:15675'
+
   // ── render ────────────────────────────────────────────────────────────────
 
   return (
@@ -237,7 +242,7 @@ export default function QueueManagementPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2">
             <Lightning size={24} weight="duotone" style={{ color: 'var(--color-1)' }} />
-            Queue Management
+            Filas
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             {lastRefresh ? `Última atualização: ${lastRefresh.toLocaleTimeString()}` : 'Carregando…'}
@@ -251,6 +256,15 @@ export default function QueueManagementPage() {
           >
             <ArrowClockwise size={14} /> Refresh
           </button>
+          <a
+            href={rabbitMgmtUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            title={`Abrir RabbitMQ Management (${rabbitMgmtUrl})`}
+          >
+            <ArrowSquareOut size={14} /> RabbitMQ
+          </a>
           <button
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             style={{ background: 'var(--color-create)', color: 'var(--on-color-create)' }}

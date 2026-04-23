@@ -367,7 +367,7 @@ export default function Sidebar() {
           <p style={{ fontSize: 10, fontWeight: 700, color: muted, textTransform: 'uppercase', letterSpacing: '.08em', padding: '6px 10px 4px', margin: 0 }}>Principal</p>
         )}
         <NavItem to="/" icon={House} label="Home" collapsed={collapsed} selBg={selBg} selColor={selColor} content={content} overlay={overlay} />
-        <NavItem to="/queue-management" icon={Lightning} label="Queue Management" collapsed={collapsed} selBg={selBg} selColor={selColor} content={content} overlay={overlay} />
+        <NavItem to="/queue-management" icon={Lightning} label="Filas" collapsed={collapsed} selBg={selBg} selColor={selColor} content={content} overlay={overlay} />
       </nav>
 
       {/* ── Spacer ─────────────────────────────────────────────────────── */}
