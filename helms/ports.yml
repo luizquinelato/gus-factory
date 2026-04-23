@@ -77,18 +77,27 @@ projects:
   saas-blueprint-v1:
     label: SaaS Blueprint V1 — Projeto Base SaaS Multi-Tenant
     alias: blueprint
+    template: true
     root: C:\Workspace\gus-factory\templates\projects\saas-blueprint-v1
     color: Green
     legacy: false
     conflicts_with: []
     prod:
       svc: {backend: 10000, auth: 10100, frontend: 5177, etl_frontend: 3344}
-      db: {port: 5444, replica: 5445, name: saas_blueprint_v1, user: saas_blueprint_v1, pass: saas_blueprint_v1}
-      rabbit: {user: guest, pass: guest, vhost: /}
+      db: {port: 5444, replica: 5445, name: saas_blueprint_v1, user: saas_blueprint_v1,
+        pass: saas_blueprint_v1}
+      rabbit:
+        user: guest
+        pass: guest
+        vhost: /
     dev:
       svc: {backend: 10010, auth: 10110, frontend: 5178, etl_frontend: 3345}
-      db: {port: 5446, replica: 5447, name: saas_blueprint_v1_dev, user: saas_blueprint_v1, pass: saas_blueprint_v1}
-      rabbit: {user: guest, pass: guest, vhost: /}
+      db: {port: 5446, replica: 5447, name: saas_blueprint_v1_dev, user: saas_blueprint_v1,
+        pass: saas_blueprint_v1}
+      rabbit:
+        user: guest
+        pass: guest
+        vhost: /
     extra_ports:
     - {name: redis, port: 6385, proto: tcp}
     - {name: qdrant, port: 6343, proto: http}
@@ -96,11 +105,21 @@ projects:
     - {name: rabbitmq_mgmt, port: 15675, proto: http}
     - {name: rabbitmq_amqp, port: 5675, proto: amqp}
     extra_ports_dev:
-    - {name: redis_dev, port: 6383, proto: tcp}
-    - {name: qdrant_dev, port: 6341, proto: http}
-    - {name: qdrant_grpc_dev, port: 6342, proto: grpc}
-    - {name: rabbitmq_mgmt_dev, port: 15674, proto: http}
-    - {name: rabbitmq_amqp_dev, port: 5674, proto: amqp}
+    - name: redis_dev
+      port: 6383
+      proto: tcp
+    - name: qdrant_dev
+      port: 6341
+      proto: http
+    - name: qdrant_grpc_dev
+      port: 6342
+      proto: grpc
+    - name: rabbitmq_mgmt_dev
+      port: 15674
+      proto: http
+    - name: rabbitmq_amqp_dev
+      port: 5674
+      proto: amqp
   plumo:
     label: Plumo — Finanças leves, vida plena
     root: C:\Workspace\gus-plumo
@@ -124,11 +143,17 @@ projects:
     prod:
       svc: {backend: 3001, auth: 4000, frontend: 3000, etl_frontend: 3333}
       db: {port: 5437, replica: 5438, name: pulse, user: pulse, pass: pulse}
-      rabbit: {user: pulse, pass: pulse, vhost: pulse_etl}
+      rabbit:
+        user: pulse
+        pass: pulse
+        vhost: pulse_etl
     dev:
       svc: {backend: 3011, auth: 4010, frontend: 3010, etl_frontend: 3343}
       db: {port: 5439, replica: 5440, name: pulse_dev, user: pulse, pass: pulse}
-      rabbit: {user: pulse, pass: pulse, vhost: pulse_etl_dev}
+      rabbit:
+        user: pulse
+        pass: pulse
+        vhost: pulse_etl_dev
     extra_ports:
     - {name: redis, port: 6379, proto: tcp}
     - {name: qdrant, port: 6333, proto: http}

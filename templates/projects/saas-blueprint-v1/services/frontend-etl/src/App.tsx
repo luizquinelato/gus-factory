@@ -40,7 +40,10 @@ function Loading() {
   )
 }
 
-// ── Sincroniza theme_mode com o banco ao montar e ao voltar para a aba ────────
+// ── Sincroniza theme_mode com o banco ao voltar para a aba ───────────────────
+// Não roda no mount: OttBootstrap já entregou o theme_mode fresco via exchange-ott
+// ou via GET /users/me na validação de sessão. Rodar aqui criaria race com
+// toggles locais recentes (resposta stale sobrescrevendo dark→light).
 function UserRefresher() {
   const { updateUser } = useAuth()
   const { setThemeMode } = useTheme()
@@ -60,8 +63,6 @@ function UserRefresher() {
   }, [setThemeMode, updateUser]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    syncTheme()
-    // Re-sincroniza ao voltar para esta aba — captura mudanças feitas no outro frontend
     const onVisible = () => { if (document.visibilityState === 'visible') syncTheme() }
     document.addEventListener('visibilitychange', onVisible)
     return () => document.removeEventListener('visibilitychange', onVisible)
@@ -161,9 +162,17 @@ function OttBootstrap({ children }: { children: React.ReactNode }) {
       return
     }
 
-    // Sem OTT — valida sessão existente no localStorage
+    // Sem OTT — valida sessão existente contra o servidor (não basta ter token
+    // no localStorage: após rollback+migrate do banco o token fica stale e a
+    // UI da sessão anterior piscaria antes do 401 redirect).
     if (storage.getToken() && storage.getUser()) {
-      setReady(true)
+      apiClient.get<User>('/users/me')
+        .then(() => setReady(true))
+        .catch((err) => {
+          // 401 já foi tratado pelo interceptor (redirect ao login principal).
+          // Para outros erros (rede/backend offline) libera a UI para não travar.
+          if (err?.response?.status !== 401) setReady(true)
+        })
     } else {
       // Salva o path atual no sessionStorage do próprio ETL (sem expor URL/porta)
       sessionStorage.setItem(ETL_RETURN_PATH_KEY, window.location.pathname + window.location.search)

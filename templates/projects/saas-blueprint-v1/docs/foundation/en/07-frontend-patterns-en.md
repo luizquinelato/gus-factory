@@ -38,43 +38,82 @@ export default apiClient;
 
 ### AuthContext
 
+The `AuthContext` trusts `localStorage` for the first render (no flicker) and then **verifies the token against the server** via `GET /users/me`. While the verification is in flight, `isValidating` is `true` and `ProtectedRoute` must render `<Loading />` instead of the protected UI. This prevents the "session leak" where a stale cached user briefly flashes on screen before the interceptor redirects to `/login` (e.g. after a DB rollback+migrate invalidates the token's `user_id`).
+
 ```typescript
 // src/contexts/AuthContext.tsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import apiClient from '../services/apiClient';
 
 interface User { id: number; name: string; email: string; role: string; tenant_id: number; }
-interface AuthContextType {
-  user: User | null; isAuthenticated: boolean;
-  login: (token: string, userData: User) => void; logout: () => void;
+
+interface AuthState {
+  user: User | null;
+  isAuthenticated: boolean;
+  /**
+   * `true` while the token from localStorage has not yet been confirmed by the
+   * server via `GET /users/me`. During this window, `ProtectedRoute` must show
+   * `<Loading />` — otherwise the previous session's UI would flash before the
+   * redirect to `/login` (e.g. after a DB rollback+migrate).
+   */
+  isValidating: boolean;
+}
+
+interface AuthContextType extends AuthState {
+  login: (token: string, userData: User) => void;
+  logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+function loadFromStorage(): AuthState {
+  const token      = localStorage.getItem('access_token');
+  const storedUser = localStorage.getItem('user_data');
+  const user       = storedUser ? (JSON.parse(storedUser) as User) : null;
+  const hasSession = !!token && !!user;
+  // isValidating starts `true` if there's a cached session — must be confirmed server-side
+  return { user, isAuthenticated: hasSession, isValidating: hasSession };
+}
 
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [state, setState] = useState<AuthState>(loadFromStorage);
+
+  // Validates the token against the server on mount. On 401, the Axios
+  // interceptor already clears the session and redirects to /login. Here we
+  // just refresh the `user` with fresh data and release the UI.
   useEffect(() => {
-    const token = localStorage.getItem('access_token');
-    const storedUser = localStorage.getItem('user_data');
-    if (token && storedUser) setUser(JSON.parse(storedUser));
-  }, []);
+    if (!state.isValidating) return;
+    let cancelled = false;
+    apiClient.get<User>('/users/me')
+      .then(({ data }) => {
+        if (cancelled) return;
+        localStorage.setItem('user_data', JSON.stringify(data));
+        setState(prev => ({ ...prev, user: data, isValidating: false }));
+      })
+      .catch(() => {
+        // 401 was already handled by the interceptor (redirect). For other
+        // errors (network/backend offline), release the UI keeping the cache.
+        if (cancelled) return;
+        setState(prev => ({ ...prev, isValidating: false }));
+      });
+    return () => { cancelled = true; };
+  }, [state.isValidating]);
 
   const login = (token: string, userData: User) => {
     localStorage.setItem('access_token', token);
     localStorage.setItem('user_data', JSON.stringify(userData));
-    setUser(userData);
+    setState({ user: userData, isAuthenticated: true, isValidating: false });
   };
 
   const logout = () => {
     localStorage.removeItem('access_token');
     localStorage.removeItem('user_data');
-    setUser(null);
+    setState({ user: null, isAuthenticated: false, isValidating: false });
     window.location.href = '/login';
   };
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated: !!user, login, logout }}>
+    <AuthContext.Provider value={{ ...state, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
@@ -89,16 +128,29 @@ export const useAuth = () => {
 
 ## 🛡️ 2. ProtectedRoute
 
-No business page should be accessible without authentication.
+No business page should be accessible without authentication. While `isValidating` is `true`, `ProtectedRoute` **must** render `<Loading />` — never the protected route's UI.
+
+```typescript
+// src/components/Loading.tsx — neutral screen shown during validation
+export function Loading() {
+  return (
+    <div className="flex h-screen items-center justify-center bg-gray-100 dark:bg-gray-950">
+      <p className="text-sm text-gray-400">Loading…</p>
+    </div>
+  );
+}
+```
 
 ```typescript
 // src/components/ProtectedRoute.tsx
 import React from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { Loading } from './Loading';
 
 export const ProtectedRoute: React.FC<{ requiredRole?: string }> = ({ requiredRole }) => {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, isValidating, user } = useAuth();
+  if (isValidating) return <Loading />;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   if (requiredRole && user?.role !== requiredRole && user?.role !== 'admin')
     return <Navigate to="/unauthorized" replace />;

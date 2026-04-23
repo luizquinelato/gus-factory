@@ -10,7 +10,7 @@ The platform is divided into microservices to ensure scalability and separation 
 1. **Frontend Application**: SPA in React (Vite + TypeScript + Tailwind).
 2. **Backend Service**: Main API in FastAPI (Python 3.11). Responsible for business logic.
 3. **Auth Service**: Isolated FastAPI service for identity management and JWT tokens.
-4. **Data Layer**: PostgreSQL 17 (with pgvector if `{{ DB_ENABLE_ML }}` = true).
+4. **Data Layer**: PostgreSQL 18 (with pgvector if `{{ DB_ENABLE_ML }}` = true).
 5. **Cache & Queue**: Redis and RabbitMQ (if `{{ ENABLE_ETL }}` = true).
 
 ## 📁 Directory Structure

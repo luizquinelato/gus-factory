@@ -33,14 +33,28 @@ function ForceLogoutHandler() {
   return null
 }
 
+/**
+ * Tela de carregamento exibida enquanto o AuthProvider valida o token no servidor.
+ * Evita que a UI da sessão anterior apareça antes do redirect ao /login.
+ */
+function Loading() {
+  return (
+    <div className="flex h-screen items-center justify-center bg-gray-100 dark:bg-gray-950">
+      <p className="text-sm text-gray-400">Carregando…</p>
+    </div>
+  )
+}
+
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, isValidating } = useAuth()
+  if (isValidating) return <Loading />
   if (!isAuthenticated) return <Navigate to="/login" replace />
   return <>{children}</>
 }
 
 function AdminRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, user } = useAuth()
+  const { isAuthenticated, isValidating, user } = useAuth()
+  if (isValidating) return <Loading />
   if (!isAuthenticated) return <Navigate to="/login" replace />
   if (!user?.is_admin) return <Navigate to="/" replace />
   return <>{children}</>
@@ -61,9 +75,10 @@ function DevTitleEffect() {
 }
 
 /**
- * Sincroniza theme_mode com o banco.
- * - Roda no mount e sempre que a aba volta ao foco (visibilitychange).
- * - Suprime transições CSS durante a correção para evitar flash visível.
+ * Sincroniza theme_mode com o banco quando a aba recebe foco novamente —
+ * captura mudanças feitas no outro frontend (ex.: ETL). Não roda no mount:
+ * o valor inicial vem do localStorage/AuthContext (já validado) e uma
+ * chamada no mount causaria race com toggles locais recentes.
  */
 function UserRefresher() {
   const { updateUser } = useAuth()
@@ -84,8 +99,6 @@ function UserRefresher() {
   }, [setThemeMode, updateUser]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    syncTheme()
-    // Re-sincroniza ao voltar para esta aba — captura mudanças feitas no outro frontend
     const onVisible = () => { if (document.visibilityState === 'visible') syncTheme() }
     document.addEventListener('visibilitychange', onVisible)
     return () => document.removeEventListener('visibilitychange', onVisible)

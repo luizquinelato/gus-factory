@@ -1,0 +1,142 @@
+# ==============================================================
+# template.yml — SaaS Blueprint V1 manifest
+# ==============================================================
+# Consumido por scripts/create_project.py. Descreve:
+#   - Identidade canônica do blueprint (para substituição textual)
+#   - Features disponíveis e o que cada uma remove quando desligada
+#   - Globs ignorados na cópia e arquivos sem substituição
+#
+# Convenção @IF:
+#   Blueprint sempre executável com TODAS as features ligadas.
+#   Entre `# @IF feat` e `# @ENDIF feat` o conteúdo está ATIVO.
+#   Ao criar projeto:
+#     feat=on  → remove apenas as linhas-marcador, mantém o bloco
+#     feat=off → remove marcadores E o bloco inteiro
+# ==============================================================
+
+schema_version: 1
+
+identity:
+  key:        saas-blueprint-v1      # kebab — string canônica no blueprint
+  key_snake:  saas_blueprint_v1      # snake — string canônica no blueprint
+  name:       "SaaS Blueprint V1"    # label literal
+  alias:      blueprint              # atalho usado por gus.ps1
+
+canonical_ports:
+  backend_prod:        10000
+  backend_dev:         10010
+  auth_prod:           10100
+  auth_dev:            10110
+  frontend_prod:       5177
+  frontend_dev:        5178
+  etl_frontend_prod:   3344
+  etl_frontend_dev:    3345
+  db_prod:             5444
+  db_prod_replica:     5445
+  db_dev:              5446
+  db_dev_replica:      5447
+  redis_prod:          6385
+  redis_dev:           6383
+  rabbitmq_amqp_prod:  5675
+  rabbitmq_amqp_dev:   5674
+  rabbitmq_mgmt_prod:  15675
+  rabbitmq_mgmt_dev:   15674
+  qdrant_prod:         6343
+  qdrant_dev:          6341
+  qdrant_grpc_prod:    6344
+  qdrant_grpc_dev:     6342
+
+canonical_db:
+  name_prod:  saas_blueprint_v1
+  name_dev:   saas_blueprint_v1_dev
+  user:       saas_blueprint_v1
+  password:   saas_blueprint_v1
+
+canonical_timezone: America/Sao_Paulo
+
+# --------------------------------------------------------------
+# Variantes Postgres — kits em infra/postgres/variants/<nome>/
+# Cada kit contém docker-compose.db.yml, docker-compose.db.dev.yml
+# e (opcional) 04-variant-init.sql com extensions a carregar.
+# Aplicadas ao projeto destino após o clone; podem ser trocadas
+# depois via `python scripts/switch_postgres_variant.py <nome>`.
+# --------------------------------------------------------------
+postgres_variants:
+  default: regular
+  available:
+    regular:
+      description: "PostgreSQL 18 vanilla (sem extension extra)"
+    pgvector:
+      description: "PostgreSQL 18 + pgvector (substitui Qdrant para embeddings)"
+      # Features mutuamente exclusivas com esta variante — desativadas
+      # automaticamente pelo create_project.py se o usuário tiver marcado ON.
+      disables: [qdrant]
+
+# --------------------------------------------------------------
+# Features — todas ON por padrão; o usuário escolhe o que desligar
+# --------------------------------------------------------------
+features:
+
+  etl:
+    description: "Pipeline ETL (Extraction → Transform → Processor) + RabbitMQ + OTT/SSO"
+    requires: [redis]                # OTT/SSO usa Redis
+    removes_when_disabled:
+      - services/frontend-etl/
+      - services/backend/app/etl/
+      - services/backend/app/routers/queues_router.py
+      - services/backend/app/routers/workers_router.py
+      - services/backend/scripts/migrations/0003_etl_schema.py
+
+  replica:
+    description: "PostgreSQL read replica (hot standby)"
+    removes_when_disabled:
+      - infra/postgres/replica/
+
+  redis:
+    partial: true
+    description: "Cache Redis (usado hoje para OTT/SSO)"
+    removes_when_disabled:
+      - services/backend/app/core/redis_client.py
+
+  qdrant:
+    partial: true
+    description: "Vector store Qdrant para embeddings"
+
+  ai:
+    partial: true
+    description: "Camada de IA (embedding + agentes LLM)"
+
+# --------------------------------------------------------------
+# Globs ignorados durante a cópia (nunca chegam ao destino)
+# --------------------------------------------------------------
+ignore:
+  - "**/__pycache__/**"
+  - "**/.venv/**"
+  - "**/node_modules/**"
+  - "**/logs/*.log"
+  - "**/.vite/**"
+  - "**/dist/**"
+  - "**/dist-ssr/**"
+  - "**/.eslintcache"
+  - "**/package-lock.json"           # regenerado via `npm install` no destino
+  - "template.yml"                   # o manifesto em si não propaga
+  # Nota: .env.dev / .env.prod NÃO são ignorados — se existirem localmente
+  # no blueprint, são copiados com substituição textual como base para o
+  # novo projeto (seguem gitignored pelo .gitignore do blueprint).
+
+# --------------------------------------------------------------
+# Padrões binários / sem substituição textual
+# --------------------------------------------------------------
+no_substitute:
+  - "**/*.png"
+  - "**/*.jpg"
+  - "**/*.jpeg"
+  - "**/*.gif"
+  - "**/*.ico"
+  - "**/*.webp"
+  - "**/*.svg"
+  - "**/*.woff"
+  - "**/*.woff2"
+  - "**/*.ttf"
+  - "**/*.otf"
+  - "**/*.eot"
