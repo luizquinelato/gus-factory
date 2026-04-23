@@ -3,52 +3,66 @@ shared_services:
   - {port: 10000, project: saas-blueprint-v1}
   - {port: 8000, project: plumo}
   - {port: 3001, project: pulse}
+  - {port: 11000, project: plurus}
   backend_dev:
   - {port: 10010, project: saas-blueprint-v1}
   - {port: 8010, project: plumo}
   - {port: 3011, project: pulse}
+  - {port: 11010, project: plurus}
   auth_prod:
   - {port: 10100, project: saas-blueprint-v1}
   - {port: 8001, project: plumo}
   - {port: 4000, project: pulse}
+  - {port: 11100, project: plurus}
   auth_dev:
   - {port: 10110, project: saas-blueprint-v1}
   - {port: 8011, project: plumo}
   - {port: 4010, project: pulse}
+  - {port: 11110, project: plurus}
   frontend_prod:
   - {port: 5177, project: saas-blueprint-v1}
   - {port: 5173, project: plumo}
   - {port: 3000, project: pulse}
+  - {port: 5179, project: plurus}
   frontend_dev:
   - {port: 5178, project: saas-blueprint-v1}
   - {port: 5174, project: plumo}
   - {port: 3010, project: pulse}
+  - {port: 5180, project: plurus}
   etl_frontend_prod:
   - {port: 3344, project: saas-blueprint-v1}
   - {port: 3333, project: pulse}
+  - {port: 3346, project: plurus}
   etl_frontend_dev:
   - {port: 3345, project: saas-blueprint-v1}
   - {port: 3343, project: pulse}
+  - {port: 3347, project: plurus}
   db_prod:
   - {port: 5444, project: saas-blueprint-v1}
   - {port: 5432, project: plumo}
   - {port: 5437, project: pulse}
+  - {port: 5448, project: plurus}
   db_prod_replica:
   - {port: 5445, project: saas-blueprint-v1}
   - {port: 5438, project: pulse}
+  - {port: 5449, project: plurus}
   db_dev:
   - {port: 5446, project: saas-blueprint-v1}
   - {port: 5433, project: plumo}
   - {port: 5439, project: pulse}
+  - {port: 5450, project: plurus}
   db_replica_dev:
   - {port: 5447, project: saas-blueprint-v1}
   - {port: 5440, project: pulse}
+  - {port: 5451, project: plurus}
   redis:
   - {port: 6385, project: saas-blueprint-v1}
   - {port: 6379, project: pulse}
+  - {port: 6386, project: plurus}
   redis_dev:
   - {port: 6383, project: saas-blueprint-v1}
   - {port: 6381, project: pulse}
+  - {port: 6387, project: plurus}
   qdrant:
   - {port: 6343, project: saas-blueprint-v1}
   - {port: 6333, project: pulse}
@@ -64,15 +78,19 @@ shared_services:
   rabbitmq_amqp:
   - {port: 5675, project: saas-blueprint-v1}
   - {port: 5672, project: pulse}
+  - {port: 5676, project: plurus}
   rabbitmq_mgmt:
   - {port: 15675, project: saas-blueprint-v1}
   - {port: 15672, project: pulse}
+  - {port: 15676, project: plurus}
   rabbitmq_amqp_dev:
   - {port: 5674, project: saas-blueprint-v1}
   - {port: 5673, project: pulse}
+  - {port: 5677, project: plurus}
   rabbitmq_mgmt_dev:
   - {port: 15674, project: saas-blueprint-v1}
   - {port: 15673, project: pulse}
+  - {port: 15677, project: plurus}
 projects:
   saas-blueprint-v1:
     label: SaaS Blueprint V1 — Projeto Base SaaS Multi-Tenant
@@ -86,18 +104,12 @@ projects:
       svc: {backend: 10000, auth: 10100, frontend: 5177, etl_frontend: 3344}
       db: {port: 5444, replica: 5445, name: saas_blueprint_v1, user: saas_blueprint_v1,
         pass: saas_blueprint_v1}
-      rabbit:
-        user: guest
-        pass: guest
-        vhost: /
+      rabbit: {user: guest, pass: guest, vhost: /}
     dev:
       svc: {backend: 10010, auth: 10110, frontend: 5178, etl_frontend: 3345}
       db: {port: 5446, replica: 5447, name: saas_blueprint_v1_dev, user: saas_blueprint_v1,
         pass: saas_blueprint_v1}
-      rabbit:
-        user: guest
-        pass: guest
-        vhost: /
+      rabbit: {user: guest, pass: guest, vhost: /}
     extra_ports:
     - {name: redis, port: 6385, proto: tcp}
     - {name: qdrant, port: 6343, proto: http}
@@ -105,21 +117,11 @@ projects:
     - {name: rabbitmq_mgmt, port: 15675, proto: http}
     - {name: rabbitmq_amqp, port: 5675, proto: amqp}
     extra_ports_dev:
-    - name: redis_dev
-      port: 6383
-      proto: tcp
-    - name: qdrant_dev
-      port: 6341
-      proto: http
-    - name: qdrant_grpc_dev
-      port: 6342
-      proto: grpc
-    - name: rabbitmq_mgmt_dev
-      port: 15674
-      proto: http
-    - name: rabbitmq_amqp_dev
-      port: 5674
-      proto: amqp
+    - {name: redis_dev, port: 6383, proto: tcp}
+    - {name: qdrant_dev, port: 6341, proto: http}
+    - {name: qdrant_grpc_dev, port: 6342, proto: grpc}
+    - {name: rabbitmq_mgmt_dev, port: 15674, proto: http}
+    - {name: rabbitmq_amqp_dev, port: 5674, proto: amqp}
   plumo:
     label: Plumo — Finanças leves, vida plena
     root: C:\Workspace\gus-plumo
@@ -143,17 +145,11 @@ projects:
     prod:
       svc: {backend: 3001, auth: 4000, frontend: 3000, etl_frontend: 3333}
       db: {port: 5437, replica: 5438, name: pulse, user: pulse, pass: pulse}
-      rabbit:
-        user: pulse
-        pass: pulse
-        vhost: pulse_etl
+      rabbit: {user: pulse, pass: pulse, vhost: pulse_etl}
     dev:
       svc: {backend: 3011, auth: 4010, frontend: 3010, etl_frontend: 3343}
       db: {port: 5439, replica: 5440, name: pulse_dev, user: pulse, pass: pulse}
-      rabbit:
-        user: pulse
-        pass: pulse
-        vhost: pulse_etl_dev
+      rabbit: {user: pulse, pass: pulse, vhost: pulse_etl_dev}
     extra_ports:
     - {name: redis, port: 6379, proto: tcp}
     - {name: qdrant, port: 6333, proto: http}
@@ -161,18 +157,32 @@ projects:
     - {name: rabbitmq_mgmt, port: 15672, proto: http}
     - {name: rabbitmq_amqp, port: 5672, proto: amqp}
     extra_ports_dev:
-    - name: redis_dev
-      port: 6381
-      proto: tcp
-    - name: qdrant_dev
-      port: 6337
-      proto: http
-    - name: qdrant_grpc_dev
-      port: 6338
-      proto: grpc
-    - name: rabbitmq_mgmt_dev
-      port: 15673
-      proto: http
-    - name: rabbitmq_amqp_dev
-      port: 5673
-      proto: amqp
+    - {name: redis_dev, port: 6381, proto: tcp}
+    - {name: qdrant_dev, port: 6337, proto: http}
+    - {name: qdrant_grpc_dev, port: 6338, proto: grpc}
+    - {name: rabbitmq_mgmt_dev, port: 15673, proto: http}
+    - {name: rabbitmq_amqp_dev, port: 5673, proto: amqp}
+  plurus:
+    label: Plurus — Plurus é um ERP SaaS multi-tenant para pequenas e médias empresas,
+      cobrindo financeiro, estoque, vendas, CRM, compras, contabilidade, logística
+      e agentes de IA — tudo em uma plataforma única com dados isolados por empresa.
+    root: C:\Workspace\gus-plurus
+    color: Blue
+    legacy: false
+    conflicts_with: []
+    prod:
+      svc: {backend: 11000, auth: 11100, frontend: 5179, etl_frontend: 3346}
+      db: {port: 5448, replica: 5449, name: plurus, user: plurus, pass: plurus}
+      rabbit: {user: plurus, pass: plurus, vhost: plurus_etl}
+    dev:
+      svc: {backend: 11010, auth: 11110, frontend: 5180, etl_frontend: 3347}
+      db: {port: 5450, replica: 5451, name: plurus_dev, user: plurus, pass: plurus}
+      rabbit: {user: plurus, pass: plurus, vhost: plurus_etl_dev}
+    extra_ports:
+    - {name: redis, port: 6386, proto: tcp}
+    - {name: rabbitmq_amqp, port: 5676, proto: tcp}
+    - {name: rabbitmq_mgmt, port: 15676, proto: tcp}
+    extra_ports_dev:
+    - {name: redis_dev, port: 6387, proto: tcp}
+    - {name: rabbitmq_amqp_dev, port: 5677, proto: tcp}
+    - {name: rabbitmq_mgmt_dev, port: 15677, proto: tcp}

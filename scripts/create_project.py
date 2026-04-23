@@ -558,17 +558,23 @@ def _ask_postgres_variant(manifest: dict) -> str:
         return ""
     default = pv.get("default") or next(iter(available))
 
-    print(f"\n  {BOLD}Variantes disponíveis{RESET} {DIM}(default: {default}){RESET}:")
-    for n, spec in available.items():
-        mark = f"{GREEN}↵{RESET} " if n == default else "  "
-        print(f"    {mark}{CYAN}{n}{RESET}  {DIM}— {spec.get('description', '')}{RESET}")
-    val = input(f"  Variante (↵ {default}): ").strip().lower()
-    if not val:
-        return default
-    if val not in available:
-        print(f"  {RED}✗ Variante desconhecida:{RESET} '{val}' {DIM}— usando default '{default}'.{RESET}")
-        return default
-    return val
+    names = list(available.keys())
+    default_idx = names.index(default) + 1 if default in names else 1
+
+    print(f"\n  {BOLD}Variantes disponíveis{RESET} {DIM}(default: {default_idx}){RESET}:")
+    for i, (n, spec) in enumerate(available.items(), 1):
+        mark = f"{GREEN}↵{RESET}" if n == default else f"{DIM}{i}{RESET}"
+        print(f"    {mark}. {CYAN}{n}{RESET}  {DIM}— {spec.get('description', '')}{RESET}")
+
+    while True:
+        val = input(f"  Variante (↵ {default_idx}): ").strip().lower()
+        if not val:
+            return default
+        if val.isdigit() and 1 <= int(val) <= len(names):
+            return names[int(val) - 1]
+        if val in available:
+            return val
+        print(f"  {RED}✗ Opção inválida.{RESET} Digite um número (1-{len(names)}) ou o nome da variante.")
 
 
 def collect_project_info(data: dict, manifest: dict) -> dict:
