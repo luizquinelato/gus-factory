@@ -10,12 +10,11 @@ Cada template define um tipo de projeto. O primeiro é **`saas-blueprint-v1`** (
 gus-factory/
 ├── README.md
 ├── helms/                             ← Configuração central compartilhada
-│   ├── ports.yml                      ← Registro de portas (Source of Truth)
-│   └── gus.ps1                        ← Profile PowerShell gerado; inclua em $PROFILE
-├── projects/                          ← Um subdiretório por projeto ativo (referência)
+│   ├── ports.yml                      ← Registro de portas + projetos (Source of Truth)
+│   └── gus.ps1                        ← CLI global (dot-source no seu $PROFILE)
+├── projects/                          ← Docs de módulos custom por projeto (lidos por generate_prompt.py)
 │   └── <chave>/
-│       ├── 00-variables.md            ← Variáveis do projeto (.gitignore)
-│       └── custom/                    ← Docs de módulos de negócio do projeto
+│       └── NN-<modulo>.md             ← Um .md por módulo custom do projeto
 ├── scripts/                           ← Scripts globais da factory
 │   ├── create_project.py              ← Cria / atualiza um projeto
 │   ├── delete_helm.py                 ← Remove projeto da configuração central
@@ -45,41 +44,38 @@ Cada projeto roda seus próprios containers para banco de dados, cache e mensage
 **`helms/ports.yml` é o único registro de portas.**
 Ao criar um projeto, as portas são calculadas automaticamente para evitar colisões com tudo que já existe no host. Ao deletar, as portas são liberadas para reutilização.
 
-**Um projeto ativo = `projects/<chave>/` (referência) + `PROJECT_ROOT` (código real).**
-A factory mantém apenas `00-variables.md` (nunca commitado) e os docs `custom/` de cada projeto. Todo o restante — docs, migrations, docker-compose e prompts — é gerado diretamente no `PROJECT_ROOT`.
+**Um projeto ativo = entrada em `helms/ports.yml` + `PROJECT_ROOT` (código real) + opcionalmente `projects/<chave>/` (docs de módulos custom).**
+A factory mantém apenas a configuração central (`ports.yml`) e, quando aplicável, os `.md` de módulos custom em `projects/<chave>/` (lidos pelo `generate_prompt.py`). Todo o código, docs, migrations, docker-compose e prompts é gerado diretamente no `PROJECT_ROOT` a partir do template.
 
 ---
 
 ## 🚀 Criar / Atualizar um Projeto
 
 ```powershell
-python scripts/create_project.py
+python scripts/create_project.py                       # menu interativo
+python scripts/create_project.py --template <key|alias> # pula o menu
 ```
 
-O script guia interativamente por 5 seções (↵ aceita o valor sugerido):
+O script é **manifest-driven** — cada template declara suas features e regras em `template.yml`. O fluxo interativo coleta:
 
 | # | Seção | O que define |
 |---|---|---|
-| 1 | Projeto | Chave, nome, descrição, caminho raiz, cor PS |
-| 2 | Portas | Backend/Auth/Frontend/DB prod+dev — calculadas sem conflito |
-| 3 | Banco de Dados | Nome, usuário e senha do banco |
-| 4 | Serviços Docker | Redis, RabbitMQ, Qdrant — porta calculada em tempo real |
-| 4b | Camada de IA | LLM, modelo e agentes (default S se Qdrant selecionado) |
-| 5 | Usuários e Admin | USER_ROLES, AUTH_PROVIDER, dados do admin inicial |
+| 1 | Template | Escolhe o blueprint a clonar (ex: `saas-blueprint-v1`) |
+| 2 | Identidade | Chave, alias, nome, descrição, caminho raiz, cor PS, timezone |
+| 3 | Features | Toggles declarados em `template.yml` (ex: redis, replica, etl_frontend, qdrant, rabbit) |
+| 4 | Portas | Backend/Auth/Frontend/DB prod+dev + extras — calculadas sem colisão |
 
-Ao confirmar, o script executa automaticamente:
+Ao confirmar, o script executa:
 
 | # | O que faz | Onde |
 |---|---|---|
-| 1 | Verifica se `PROJECT_ROOT` já existe — alerta e pede confirmação para limpar | host |
-| 2 | Copia docs base com vars substituídas | `PROJECT_ROOT/docs/initial/` |
-| 3 | Copia migration runner + `0001_initial_schema` + `0002_initial_seed_data` com vars substituídas | `PROJECT_ROOT/services/backend/scripts/` |
-| 4 | Gera os 3 docker-compose files (ativa serviços selecionados) | `PROJECT_ROOT/` |
-| 5 | Cria `projects/<chave>/00-variables.md` | blueprint |
-| 6 | Registra todas as portas | `helms/ports.yml` |
-| 7 | Adiciona bloco `# START … # END` | `helms/gus.ps1` |
+| 1 | Verifica se `PROJECT_ROOT` já existe — exige confirmação (`APAGAR`) para limpar | host |
+| 2 | Clona a árvore do template com substituição de identidade (canônica → nova) | `PROJECT_ROOT/` |
+| 3 | Processa marcadores `@IF feat / @ENDIF feat` (remove blocos de features desativadas) | `PROJECT_ROOT/` |
+| 4 | Remove paths listados em `features[f].removes_when_disabled` para features off | `PROJECT_ROOT/` |
+| 5 | Registra portas, cor, identidade e extras | `helms/ports.yml` |
 
-Se a chave já existir, entra em **modo atualização**: valores atuais viram padrão, portas são recalculadas e a seção do profile é substituída cirurgicamente.
+O `helms/gus.ps1` lê projetos **dinamicamente** de `ports.yml` — nenhum arquivo de profile é gerado ou editado. Se a chave já existir, entra em **modo atualização**: valores atuais viram padrão e as portas são recalculadas preservando as alocações existentes onde possível.
 
 ---
 
@@ -125,9 +121,9 @@ projects:
 
 ---
 
-## 🖥️ PowerShell Profile — `helms/gus.ps1`
+## 🖥️ CLI `gus` — `helms/gus.ps1`
 
-Gerado e mantido automaticamente. Para ativar os aliases em qualquer terminal:
+CLI global que lê `helms/ports.yml` em runtime — novos projetos ficam disponíveis **sem recarregar o profile**.
 
 ### Configuração inicial (apenas uma vez)
 
@@ -142,55 +138,60 @@ Add-Content $PROFILE '. "C:\Workspace\gus-factory\helms\gus.ps1"'
 . $PROFILE
 ```
 
-### Recarregar após cada atualização do blueprint
+### Convenção de argumentos
 
-```powershell
-. $PROFILE
-```
+Todo comando aceita um ou mais projetos — `<proj>` para PROD, `<proj>-dev` para DEV:
 
-Cada projeto ocupa um bloco delimitado por marcadores:
-
-```powershell
-# START meu_erp
-# =================================================================
-# MEU_ERP — Meu ERP
-# Root   : C:\Workspace\gus-meu-erp
-# PROD   : Backend :9000 | Auth :9100 | Frontend :5175 | DB :5434
-# DEV    : Backend :9010 | Auth :9110 | Frontend :5176 | DB :5436
-# =================================================================
-function meu_erp-rat     { ... }   # Sobe Docker + abre tabs PROD
-function meu_erp-rat-dev { ... }   # Sobe Docker + abre tabs DEV
-Set-Alias -Name rat-meu_erp      -Value meu_erp-rat
-# END meu_erp
-```
-
-**Aliases disponíveis** (`<p>` = chave do projeto):
-
-| Alias | Ação |
+| Target | Significado |
 |---|---|
-| `rat-<p>` / `rat-<p>-dev` | Docker up + abre tabs PROD / DEV |
-| `dkup-<p>` / `dkdown-<p>` | Docker PROD up / down |
-| `dkup-<p>-dev` / `dkdown-<p>-dev` | Docker DEV up / down |
-| `dbm-<p>` / `dbr-<p>` / `dbs-<p>` | Migration apply / rollback / status PROD |
-| `dbm-<p>-dev` / `dbr-<p>-dev` / `dbs-<p>-dev` | Migration apply / rollback / status DEV |
-| `kill-<p>` | Para todos os processos nas portas do projeto |
+| `<proj>` | Projeto em PROD (ex: `gus dkup pulse`) |
+| `<proj>-dev` | Projeto em DEV (ex: `gus dkup pulse-dev`) |
+| `all` | Todos os projetos, PROD **e** DEV |
+| `all-prod` / `all-dev` | Todos os projetos em PROD / DEV |
+
+Aliases definidos em `ports.yml` (`alias:`) também são aceitos.
+
+### Comandos principais
+
+| Grupo | Comando | Ação |
+|---|---|---|
+| **Docker** | `gus dkup / dkdown / dkstart / dkstop / dkrestart <proj...>` | Ciclo de vida dos containers |
+|  | `gus dkdown <proj...> -v` | Down + remove volumes |
+|  | `gus dks <proj...>` | `docker ps` filtrado por projeto |
+|  | `gus dkl <proj...>` | Logs em nova aba |
+| **Migrations** | `gus dbm <proj...>` | Aplica migrations pendentes |
+|  | `gus dbmv <proj> <ver>` / `gus dbrv <proj> <ver>` | Apply / rollback até versão N |
+|  | `gus dbmc <proj> <nome>` | Cria nova migration |
+|  | `gus dbs <proj...>` / `gus dbr <proj...>` | Status / rollback total |
+| **Venvs** | `gus venvs <proj...> [--force] [--backend] [--auth] [--frontend] [--frontend-etl]` | (Re)cria venvs Python |
+| **App (tabs)** | `gus rat <proj...>` | Back + auth + front + etl em abas (janela atual) |
+|  | `gus ratp <proj...>` | Nova janela por projeto |
+|  | `gus back / auth / front / etl <proj...>` | Sobe um serviço específico |
+| **Navegação** | `gus cd [--back\|--front\|--auth\|--etl\|--scripts] <proj>` | Troca para o diretório do serviço |
+|  | `gus cd --factory` / `gus cd --blueprint` | Raiz da factory / do template principal |
+| **Cleanup** | `gus qdc <proj>` / `gus rbc <proj>` | Limpa Qdrant / RabbitMQ do projeto |
+| **Utilitários** | `gus list` / `gus help` | Lista projetos / exibe ajuda completa |
 
 ---
 
 ## 🗑️ Deletar um Projeto
 
 ```powershell
-python scripts/delete_helm.py <chave>
+python scripts/delete_helm.py <chave|alias>           # só ports.yml
+python scripts/delete_helm.py <chave|alias> --force   # + apaga diretório do projeto
 ```
 
-Remove **cirurgicamente** (confirma antes de executar):
+Remove o projeto de `helms/ports.yml` (confirma antes de executar):
 
-- Entrada em `helms/ports.yml` (projeto + todas as portas em `shared_services`)
-- Bloco `# START <chave>` … `# END <chave>` em `helms/gus.ps1`
-- Linha do SUMMARY no profile
+- Entrada em `projects[<chave>]`
+- Todas as ocorrências em `shared_services[*]` (portas liberadas)
+- Referências a `<chave>` em `conflicts_with` de outros projetos
 
 As portas ficam imediatamente disponíveis para o próximo `create_project.py`.
-Os arquivos em `projects/<chave>/` **não são tocados**.
+Como o `gus.ps1` lê `ports.yml` em runtime, o projeto desaparece do `gus list` / `gus help` imediatamente.
+
+Sem `--force`, os arquivos em `PROJECT_ROOT` **não são tocados** — o comando atua apenas na configuração central.
+Com `--force`, o diretório indicado em `projects[<chave>].root` é apagado recursivamente após confirmação extra (digite a chave do projeto para confirmar).
 
 ---
 

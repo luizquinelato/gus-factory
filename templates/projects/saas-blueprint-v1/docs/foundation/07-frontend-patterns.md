@@ -122,6 +122,13 @@ interface AuthState {
   user: User | null;
   tenantColors: TenantColorsPayload | null;
   isAuthenticated: boolean;
+  /**
+   * `true` enquanto o token lido do localStorage ainda não foi confirmado pelo
+   * servidor via `GET /users/me`. Durante esse intervalo o `ProtectedRoute`
+   * deve exibir `<Loading />` — impede que a UI da sessão anterior apareça
+   * antes do redirect ao `/login` (ex.: após rollback+migrate do banco).
+   */
+  isValidating: boolean;
 }
 
 interface AuthContextType extends AuthState {
@@ -133,24 +140,49 @@ interface AuthContextType extends AuthState {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+function loadFromStorage(): AuthState {
+  const user         = storage.getUser();
+  const tenantColors = storage.getTenantColors();
+  const hasSession   = !!storage.getToken() && !!user;
+  // isValidating começa `true` se há sessão em cache — precisa confirmar com o servidor
+  return { user, tenantColors, isAuthenticated: hasSession, isValidating: hasSession };
+}
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [state, setState] = useState<AuthState>({
-    user: storage.getUser(),
-    tenantColors: storage.getTenantColors(),
-    isAuthenticated: !!storage.getToken(),
-  });
+  const [state, setState] = useState<AuthState>(loadFromStorage);
+
+  // Valida o token contra o servidor no mount. Em 401, o interceptor do Axios
+  // já faz clearSession() + redirect para /login. Aqui apenas atualizamos o
+  // `user` com dados frescos e liberamos a UI (isValidating=false).
+  useEffect(() => {
+    if (!state.isValidating) return;
+    let cancelled = false;
+    apiClient.get<User>('/users/me')
+      .then(({ data }) => {
+        if (cancelled) return;
+        storage.setUser(data);
+        setState(prev => ({ ...prev, user: data, isValidating: false }));
+      })
+      .catch(() => {
+        // 401 já foi tratado pelo interceptor (redirect). Para outros erros
+        // (rede/backend offline), libera a UI mantendo a sessão em cache.
+        if (cancelled) return;
+        setState(prev => ({ ...prev, isValidating: false }));
+      });
+    return () => { cancelled = true; };
+  }, [state.isValidating]);
 
   const login = (token: string, userData: User, tenantColors: TenantColorsPayload) => {
     storage.setToken(token);
     storage.setUser(userData);
     storage.setTenantColors(tenantColors);
-    setState({ user: userData, tenantColors, isAuthenticated: true });
+    setState({ user: userData, tenantColors, isAuthenticated: true, isValidating: false });
   };
 
   const logout = async () => {
     try { await apiClient.post('/auth/logout'); } catch { /* silent */ }
     storage.clear();
-    setState({ user: null, tenantColors: null, isAuthenticated: false });
+    setState({ user: null, tenantColors: null, isAuthenticated: false, isValidating: false });
     window.location.href = '/login';
   };
 
@@ -200,19 +232,37 @@ export const storage = {
 
 Nenhuma página de negócio deve ser acessível sem autenticação. Use o componente `ProtectedRoute` para blindar as rotas.
 
+> **Regra de ouro (auth verificada):** enquanto `isValidating` for `true`, o `ProtectedRoute` **deve** renderizar `<Loading />` — nunca a UI da rota. Isso evita o vazamento de sessão em que, após um rollback+migrate do banco, o token em cache aponta para um usuário que não existe mais e a UI anterior aparece por frações de segundo antes do `/users/me` falhar e o interceptor redirecionar para `/login`.
+
+```typescript
+// src/components/Loading.tsx — tela neutra exibida durante a validação
+export function Loading() {
+  return (
+    <div className="flex h-screen items-center justify-center bg-gray-100 dark:bg-gray-950">
+      <p className="text-sm text-gray-400">Carregando…</p>
+    </div>
+  );
+}
+```
+
 ```typescript
 // src/components/ProtectedRoute.tsx
 import React from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { Loading } from './Loading';
 
 interface ProtectedRouteProps {
   requiredRole?: string;
 }
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ requiredRole }) => {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, isValidating, user } = useAuth();
 
+  // 1. Enquanto o servidor não confirmou a sessão, segura a renderização.
+  if (isValidating) return <Loading />;
+
+  // 2. Só depois decide redirect ou liberar a rota.
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }

@@ -31,15 +31,19 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
     INTERNAL_API_KEY: str = ""
 
+    # @IF redis
     # Cache — porta 6385 (prod saas-blueprint-v1), sobreposta pelo .env
     REDIS_URL: str = "redis://localhost:6385/0"
+    # @ENDIF redis
 
+    # @IF etl
     # RabbitMQ
     RABBITMQ_HOST: str = "localhost"
     RABBITMQ_PORT: int = 5672
     RABBITMQ_USER: str = "guest"
     RABBITMQ_PASS: str = "guest"
     RABBITMQ_MANAGEMENT_PORT: int = 15672
+    # @ENDIF etl
 
     # Auth service URL — sempre localhost (roda no host)
     AUTH_SERVICE_URL: str = "http://localhost:10100"

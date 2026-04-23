@@ -91,7 +91,7 @@ export default function LoginPage() {
           }}>
             <img src="/favicon.svg" alt="logo" style={{ width: 48, height: 48 }} />
           </div>
-          <h1 style={{ fontSize: '2.2rem', fontWeight: 800, color: '#fff', margin: 0, letterSpacing: '0.04em' }}>SAAS BLUEPRINT V1</h1>
+          <h1 style={{ fontSize: '2.2rem', fontWeight: 800, color: '#fff', margin: 0, letterSpacing: '0.04em', textTransform: 'uppercase' }}>SaaS Blueprint V1</h1>
           <p style={{ color: '#94a3b8', marginTop: 6, fontSize: '.95rem' }}>Plataforma SaaS Multi-Tenant</p>
         </div>
 

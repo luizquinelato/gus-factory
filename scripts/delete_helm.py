@@ -2,18 +2,26 @@
 """
 scripts/delete_helm.py
 ======================
-Remove um projeto dos arquivos de configuração centralizados:
-  - helms/ports.yml          (entrada do projeto)
-  - helms/powershell_profile.ps1  (seção, summary e linha de header)
+Remove um projeto da configuração central (`helms/ports.yml`):
+  - entrada em `projects[<key>]`
+  - todas as ocorrências do projeto em `shared_services[*]`
+  - referências a `<key>` em `conflicts_with` de outros projetos
 
-NÃO toca em nenhum arquivo dentro de projects/<key>/.
+O CLI `helms/gus.ps1` lê projetos dinamicamente de ports.yml — removido daqui,
+o projeto desaparece do `gus help` automaticamente.
+
+Por padrão NÃO toca nos arquivos do projeto. Com `--force`, também apaga
+recursivamente o diretório indicado em `projects[<key>].root`.
 
 Uso:
-    python scripts/delete_helm.py <chave>
-    python scripts/delete_helm.py plurus
+    python scripts/delete_helm.py <chave|alias>
+    python scripts/delete_helm.py <chave|alias> --force
 """
 from __future__ import annotations
 import argparse
+import os
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -42,9 +50,27 @@ _PortsDumper.add_representer(
 )
 
 
-ROOT         = Path(__file__).parent.parent
-PORTS_FILE   = ROOT / "helms" / "ports.yml"
-PROFILE_FILE = ROOT / "helms" / "powershell_profile.ps1"
+ROOT       = Path(__file__).parent.parent
+PORTS_FILE = ROOT / "helms" / "ports.yml"
+
+
+def fast_rmtree(path: Path) -> None:
+    """Remove uma árvore de diretórios usando o método nativo mais rápido do SO.
+
+    No Windows, `shutil.rmtree` é ordens de magnitude mais lento que `rmdir /s /q`
+    em projetos com `node_modules` (dezenas de milhares de arquivos), porque
+    percorre Python-side file-by-file. O `cmd /c rmdir` despacha a recursão para
+    o kernel em batch. Fora do Windows mantém `shutil.rmtree` (igualmente rápido
+    em ext4/APFS).
+    """
+    if os.name == "nt":
+        # /s = recursivo, /q = sem prompts. cmd /c para resolver o built-in rmdir.
+        subprocess.run(
+            ["cmd", "/c", "rmdir", "/s", "/q", str(path)],
+            check=True,
+        )
+    else:
+        shutil.rmtree(path)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -108,57 +134,16 @@ def save_ports(data: dict) -> None:
                   default_flow_style=False, Dumper=_PortsDumper)
 
 
-# ── PS Profile removal ────────────────────────────────────────────────────────
-
-def remove_from_profile(profile: str, k: str) -> tuple[str, list[str]]:
-    """Remove seção, summary e header do projeto k. Retorna (profile_atualizado, itens_removidos)."""
-    K    = k.upper()
-    done = []
-
-    # Seção principal — usa marcadores # START/END {key} para remoção cirúrgica
-    start_marker = f"\n# START {k}\n"
-    end_marker   = f"\n# END {k}\n"
-    idx_s = profile.find(start_marker)
-    if idx_s >= 0:
-        idx_e = profile.find(end_marker, idx_s)
-        if idx_e >= 0:
-            profile = profile[:idx_s] + profile[idx_e + len(end_marker):]
-            done.append("seção principal")
-
-    # Bloco no SUMMARY
-    sum_start = f'Write-Host "  [{K}]'
-    idx_sum   = profile.find(sum_start)
-    if idx_sum >= 0:
-        close     = '\nWrite-Host ""\n'
-        idx_close = profile.find(close, idx_sum)
-        if idx_close >= 0:
-            profile = profile[:idx_sum] + profile[idx_close + len(close):]
-        # Decrement project count
-        for n in range(50, 1, -1):
-            if f"carregado — {n} projeto" in profile:
-                profile = profile.replace(
-                    f"carregado — {n} projeto", f"carregado — {n - 1} projeto", 1
-                )
-                break
-        done.append("bloco do SUMMARY")
-
-    # Linha de aliases no cabeçalho
-    header_line = f"#   rat-{k} / rat-{k}-dev    dbm-{k} / dbm-{k}-dev    kill-{k}\n"
-    if header_line in profile:
-        profile = profile.replace(header_line, "")
-        done.append("linha do cabeçalho")
-
-    return profile, done
-
-
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Remove um projeto da configuração central (ports.yml + gus.ps1)."
+        description="Remove um projeto da configuração central (helms/ports.yml)."
     )
     parser.add_argument("project", metavar="PROJETO",
                         help="Chave ou alias do projeto (ver helms/ports.yml)")
+    parser.add_argument("--force", action="store_true",
+                        help="Também apaga recursivamente o diretório do projeto (root). Requer confirmação extra.")
     args = parser.parse_args()
 
     data     = load_ports()
@@ -168,28 +153,40 @@ def main() -> None:
     prod     = proj.get("prod") or {}
     prod_svc = prod.get("svc") or {}
     prod_db  = prod.get("db")  or {}
+    root_str = proj.get("root", "") or ""
+    root_path = Path(root_str) if root_str else None
 
     dashes = "─" * 18
     bar    = "─" * (2 * 18 + 2 + len(key))
     print(f"\n{YELLOW}{dashes} {key} {dashes}{RESET}")
-    print(f"{YELLOW}  root → {proj.get('root', '')}{RESET}")
+    print(f"{YELLOW}  root → {root_str}{RESET}")
     print(f"{YELLOW}{bar}{RESET}")
     print(f"\n  Projeto : {key}  {DIM}({proj.get('label', '')}){RESET}")
     print(f"  PROD    : backend={prod_svc.get('backend','-')}  auth={prod_svc.get('auth','-')}  "
           f"frontend={prod_svc.get('frontend','-')}  db={prod_db.get('port','-')}")
     print(f"\n  {YELLOW}Será removido de:{RESET}")
-    print(f"    • helms/ports.yml")
-    print(f"    • helms/gus.ps1")
-    print(f"\n  {YELLOW}NÃO será removido:{RESET}")
-    print(f"    • projects/{key}/  (arquivos intactos)")
+    print(f"    • helms/ports.yml  (projects + shared_services + conflicts_with)")
+    if args.force:
+        exists_note = "" if (root_path and root_path.exists()) else f"  {DIM}(não existe){RESET}"
+        print(f"    • {RED}{root_str}{RESET}  {RED}(--force: apaga recursivamente){RESET}{exists_note}")
+    else:
+        print(f"\n  {YELLOW}NÃO será removido:{RESET}")
+        print(f"    • {root_str}  (arquivos do projeto intactos)")
 
     if not yesno(f"\nConfirmar remoção de '{key}'?"):
         print("Cancelado.")
         sys.exit(0)
 
+    if args.force and root_path and root_path.exists():
+        print(f"\n  {RED}⚠  --force apagará {root_path} de forma irreversível.{RESET}")
+        typed = input(f"  Digite '{key}' para confirmar: ").strip()
+        if typed != key:
+            print("Cancelado (confirmação não confere).")
+            sys.exit(0)
+
     print()
 
-    # 1. ports.yml — remove projeto e limpa shared_services
+    # 1. ports.yml — remove projeto, limpa shared_services e conflicts_with
     del data["projects"][key]
 
     shared = data.get("shared_services", {})
@@ -207,25 +204,38 @@ def main() -> None:
         if not shared[svc_name]:
             del shared[svc_name]
 
+    conflicts_cleaned: list[str] = []
+    for other_key, other_proj in data.get("projects", {}).items():
+        cw = other_proj.get("conflicts_with") or []
+        if key in cw:
+            other_proj["conflicts_with"] = [c for c in cw if c != key]
+            conflicts_cleaned.append(other_key)
+
     save_ports(data)
     freed_msg = f" {DIM}(liberou: {', '.join(freed)}){RESET}" if freed else ""
     print(f"  {GREEN}✔{RESET} helms/ports.yml — '{key}' removido{freed_msg}")
+    if conflicts_cleaned:
+        print(f"  {GREEN}✔{RESET} conflicts_with limpo em: {', '.join(conflicts_cleaned)}")
 
-    # 2. gus.ps1
-    with open(PROFILE_FILE, encoding="utf-8") as f:
-        content = f.read()
-    content, removed = remove_from_profile(content, key)
-    with open(PROFILE_FILE, "w", encoding="utf-8", newline="\n") as f:
-        f.write(content)
-    if removed:
-        print(f"  {GREEN}✔{RESET} helms/gus.ps1 — removido: {', '.join(removed)}")
-    else:
-        print(f"  {YELLOW}⚠{RESET} helms/gus.ps1 — nenhuma seção encontrada para '{key}'")
+    # 2. --force: apaga o diretório do projeto (se existir)
+    if args.force and root_path:
+        if root_path.exists():
+            print(f"  {DIM}… apagando {root_path} (pode levar alguns segundos){RESET}")
+            try:
+                fast_rmtree(root_path)
+                print(f"  {GREEN}✔{RESET} {root_path} — diretório apagado")
+            except Exception as exc:
+                print(f"  {RED}✗{RESET} falha ao apagar {root_path}: {exc}")
+                sys.exit(1)
+        else:
+            print(f"  {DIM}• {root_path} — não existe, nada a apagar{RESET}")
 
     print(f"\n{GREEN}✅ '{key}' removido da configuração central.{RESET}")
-    print(f"   Arquivos em projects/{key}/ permanecem intactos.")
-    print(f"   Para deletar também os arquivos:")
-    print(f"     {DIM}Remove-Item -Recurse -Force projects\\{key}{RESET}")
+    if not (args.force and root_path and not root_path.exists()):
+        if not args.force:
+            print(f"   Arquivos do projeto permanecem intactos em: {root_str}")
+            print(f"   Para deletar também os arquivos:")
+            print(f"     {DIM}python scripts/delete_helm.py {key} --force{RESET}")
 
 
 if __name__ == "__main__":

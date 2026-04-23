@@ -17,7 +17,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.database import get_db_session
 from app.core.limiter import limiter
+# @IF etl
 from app.core.redis_client import redis_get_and_delete, redis_set
+# @ENDIF etl
 from app.dependencies.auth import require_authentication
 from app.schemas.auth_schemas import (
     LoginRequest, LoginResponse, UserResponse, TenantColorsPayload, ColorSchemeResponse
@@ -98,6 +100,7 @@ async def logout(request: Request):
     return {"detail": "Logout realizado com sucesso."}
 
 
+# @IF etl
 # ── OTT — SSO para ETL ────────────────────────────────────────────────────────
 
 _OTT_TTL = 30  # segundos — janela para o ETL frontend trocar o OTT
@@ -196,4 +199,5 @@ async def exchange_ott(request: Request, body: dict):
         "user":         data["user"],
         "tenant_colors": data["tenant_colors"],
     }
+# @ENDIF etl
 

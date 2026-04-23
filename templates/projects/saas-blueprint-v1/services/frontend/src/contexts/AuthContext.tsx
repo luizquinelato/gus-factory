@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react'
 import apiClient from '../services/apiClient'
 import type { User, TenantColors, LoginResponse } from '../types'
 import { storage } from '../utils/storage'
@@ -8,6 +8,13 @@ interface AuthState {
   tenantColors: TenantColors | null
   token: string | null
   isAuthenticated: boolean
+  /**
+   * `true` enquanto o token lido do localStorage ainda não foi confirmado pelo
+   * servidor via `GET /users/me`. Durante esse intervalo, ProtectedRoute deve
+   * exibir <Loading /> — impede que a UI da sessão anterior apareça antes do
+   * redirect ao /login (ex.: após rollback+migrate do banco).
+   */
+  isValidating: boolean
 }
 
 interface AuthContextValue extends AuthState {
@@ -24,14 +31,37 @@ function loadFromStorage(): AuthState {
     const token        = storage.getToken()
     const user         = JSON.parse(storage.getUser()         || 'null') as User | null
     const tenantColors = JSON.parse(storage.getTenantColors() || 'null') as TenantColors | null
-    return { token, user, tenantColors, isAuthenticated: !!token && !!user }
+    const hasSession   = !!token && !!user
+    // isValidating começa true se há sessão em cache — precisa confirmar com o servidor
+    return { token, user, tenantColors, isAuthenticated: hasSession, isValidating: hasSession }
   } catch {
-    return { token: null, user: null, tenantColors: null, isAuthenticated: false }
+    return { token: null, user: null, tenantColors: null, isAuthenticated: false, isValidating: false }
   }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>(loadFromStorage)
+
+  // Valida o token contra o servidor no mount. Em 401, o interceptor do Axios
+  // já faz clearSession() + window.location.href = '/login' (full navigation).
+  // Aqui só precisamos atualizar o user com dados frescos e liberar a UI.
+  useEffect(() => {
+    if (!state.isValidating) return
+    let cancelled = false
+    apiClient.get<User>('/users/me')
+      .then(({ data }) => {
+        if (cancelled) return
+        storage.setUser(JSON.stringify(data))
+        setState(prev => ({ ...prev, user: data, isValidating: false }))
+      })
+      .catch(() => {
+        // 401 já foi tratado pelo interceptor (redirect). Para outros erros
+        // (rede/backend offline), libera a UI mantendo a sessão em cache.
+        if (cancelled) return
+        setState(prev => ({ ...prev, isValidating: false }))
+      })
+    return () => { cancelled = true }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const login = useCallback(async (email: string, password: string): Promise<LoginResponse> => {
     const { data } = await apiClient.post<LoginResponse>('/auth/login', { email, password })
@@ -46,6 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user: data.user,
       tenantColors: data.tenant_colors,
       isAuthenticated: true,
+      isValidating: false,
     })
     return data
   }, [])
@@ -61,7 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     storage.removeRefreshToken()
     storage.removeUser()
     storage.removeTenantColors()
-    setState({ token: null, user: null, tenantColors: null, isAuthenticated: false })
+    setState({ token: null, user: null, tenantColors: null, isAuthenticated: false, isValidating: false })
 
     if (token) {
       // Fire-and-forget com Authorization explícito — bypass do interceptor.

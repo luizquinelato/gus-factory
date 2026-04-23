@@ -307,6 +307,7 @@ export default function Sidebar() {
 
   const isAdmin = user?.is_admin ?? false
 
+  // @IF etl
   // ── ETL link ─────────────────────────────────────────────────────────────────
   // OTT é pré-gerado silenciosamente quando o admin loga (useEffect abaixo).
   // Clique normal → instantâneo. Expirou (>25s) ou falhou → loading no botão.
@@ -343,6 +344,7 @@ export default function Sidebar() {
 
   // Pré-gera OTT assim que o admin estiver autenticado — clique será instantâneo
   useEffect(() => { if (isAdmin) generateEtlHref() }, [isAdmin, generateEtlHref])
+  // @ENDIF etl
 
   const toggleTheme = useCallback(() => {
     const next: typeof themeMode = isDark ? 'light' : 'dark'
@@ -458,9 +460,10 @@ export default function Sidebar() {
           </div>
         )}
 
-        {/* ETL + Configurações — apenas admin */}
+        {/* Ações de admin (ETL quando habilitado + Configurações) */}
         {isAdmin && (
           <>
+            {/* @IF etl */}
             {/* ETL: <a> com href pré-gerado — permite clique normal (mesma aba)
                 e clique-direito → "Abrir em nova aba" do browser.
                 Loading exibido apenas se OTT expirou ou falhou na geração inicial. */}
@@ -515,6 +518,7 @@ export default function Sidebar() {
               </a>
               <Tooltip label={etlLoading ? 'Abrindo ETL…' : 'Módulo ETL'} visible={collapsed && etlHov} />
             </div>
+            {/* @ENDIF etl */}
             <FooterBtn
               ref={settingsBtnRef}
               icon={Gear} label="Configurações" collapsed={collapsed}
