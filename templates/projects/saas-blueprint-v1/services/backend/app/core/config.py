@@ -51,7 +51,7 @@ class Settings(BaseSettings):
 
     # CORS â€” frontend principal (5177 prod / 5178 dev) + ETL (3344 prod / 3345 dev)
     FRONTEND_URL: str = "http://localhost:5177"
-    ETL_FRONTEND_URL: str = "http://localhost:3344"
+    FRONTEND_ETL_URL: str = "http://localhost:3344"
     BACKEND_CORS_ORIGINS: list[str] = [
         "http://localhost:5177",  # frontend prod
         "http://localhost:5178",  # frontend dev

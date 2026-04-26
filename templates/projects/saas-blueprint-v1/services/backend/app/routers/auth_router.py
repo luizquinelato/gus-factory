@@ -164,7 +164,7 @@ async def generate_ott(
     await redis_set(f"{_OTT_PREFIX}{ott}", payload, _OTT_TTL)
 
     logger.info("OTT gerado para user_id=%s ip=%s", user_id, client_ip)
-    return {"ott": ott, "etl_url": settings.ETL_FRONTEND_URL, "ttl": _OTT_TTL}
+    return {"ott": ott, "etl_url": settings.FRONTEND_ETL_URL, "ttl": _OTT_TTL}
 
 
 @router.post("/exchange-ott")

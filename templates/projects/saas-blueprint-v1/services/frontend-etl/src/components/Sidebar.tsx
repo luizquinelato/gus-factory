@@ -337,17 +337,22 @@ export default function Sidebar() {
 
         {/* Nome — só quando expandido */}
         {!collapsed && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-            <span style={{ fontSize: 15, fontWeight: 700, color: content, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              SaaS Blueprint V1
-            </span>
-            <span style={{
-              fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 4, flexShrink: 0,
-              background: 'var(--color-1)', color: 'var(--on-color-1)',
-              letterSpacing: '.5px', textTransform: 'uppercase',
-            }}>
-              ETL
-            </span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 15, fontWeight: 700, color: content, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                SaaS Blueprint V1
+              </span>
+              <span style={{
+                fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 4, flexShrink: 0,
+                background: 'var(--color-1)', color: 'var(--on-color-1)',
+                letterSpacing: '.5px', textTransform: 'uppercase',
+              }}>
+                ETL
+              </span>
+            </div>
+            {import.meta.env.MODE === 'dev' && (
+              <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: '#facc15', color: '#713f12', alignSelf: 'flex-start' }}>DEV</span>
+            )}
           </div>
         )}
 
@@ -463,11 +468,8 @@ export default function Sidebar() {
             </div>
             {!collapsed && (
               <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
-                <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: content, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: content, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.4 }}>
                   {user?.name ?? '—'}
-                  {import.meta.env.MODE === 'dev' && (
-                    <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: '#facc15', color: '#713f12', flexShrink: 0 }}>DEV</span>
-                  )}
                 </p>
                 <p style={{ margin: 0, fontSize: 11, color: muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {user?.email ?? ''}

@@ -58,11 +58,17 @@ def _silence_third_party_loggers() -> None:
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     logging.getLogger("requests").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("sqlalchemy").setLevel(logging.CRITICAL)
-    logging.getLogger("sqlalchemy.engine").setLevel(logging.CRITICAL)
-    logging.getLogger("sqlalchemy.pool").setLevel(logging.CRITICAL)
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
     logging.getLogger("fastapi").setLevel(logging.WARNING)
+    # pika — silencia o ruído de connection workflow e socket (mantém só WARNING+)
+    logging.getLogger("pika").setLevel(logging.WARNING)
+    # sqlalchemy — echo=False sempre no engine; aqui decidimos o nível via SQL_ECHO
+    # SQL_ECHO=true em dev habilita queries no log sem duplicar (sem handler próprio do SA)
+    _sql_echo = os.environ.get("SQL_ECHO", "false").lower() in ("1", "true", "yes")
+    _sa_level = logging.INFO if _sql_echo else logging.CRITICAL
+    logging.getLogger("sqlalchemy").setLevel(_sa_level)
+    logging.getLogger("sqlalchemy.engine").setLevel(_sa_level)
+    logging.getLogger("sqlalchemy.pool").setLevel(logging.CRITICAL)  # pool sempre silenciado
 
 
 def get_logger(name: Optional[str] = None) -> logging.Logger:

@@ -13,7 +13,7 @@ services:
   # â”€â”€ PostgreSQL DEV â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   postgres-dev:
     image: postgres:18
-    container_name: gus-blueprint-postgres-dev
+    container_name: blueprint-postgres-dev
     command: >
       postgres
       --hba-file=/etc/saas-blueprint-config/pg_hba.conf
@@ -48,7 +48,7 @@ services:
   # â”€â”€ PostgreSQL DEV Replica (DB_ENABLE_REPLICA=true) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   postgres-dev-replica:
     image: postgres:18
-    container_name: gus-blueprint-postgres-dev-replica
+    container_name: blueprint-postgres-replica-dev
     entrypoint: ["/replica/entrypoint.sh"]
     environment:
       POSTGRES_DB:       blueprint_dev
@@ -84,7 +84,7 @@ services:
   # â”€â”€ Redis DEV (included if CACHE_LAYER=Redis) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   redis-dev:
     image: redis:7-alpine
-    container_name: gus-blueprint-redis-dev
+    container_name: blueprint-redis-dev
     command: redis-server --appendonly yes
     ports:
       - "6383:6379"
@@ -99,7 +99,7 @@ services:
   # â”€â”€ RabbitMQ DEV (included if QUEUE_LAYER=RabbitMQ) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   rabbitmq-dev:
     image: rabbitmq:3-management-alpine
-    container_name: gus-blueprint-rabbitmq-dev
+    container_name: blueprint-rabbitmq-dev
     ports:
       - "5674:5672"
       - "15674:15672"
@@ -118,7 +118,7 @@ services:
   # â”€â”€ Qdrant DEV (included if EMBEDDING_DB=Qdrant) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   qdrant-dev:
     image: qdrant/qdrant:latest
-    container_name: gus-blueprint-qdrant-dev
+    container_name: blueprint-qdrant-dev
     ports:
       - "6341:6333"
       - "6342:6334"

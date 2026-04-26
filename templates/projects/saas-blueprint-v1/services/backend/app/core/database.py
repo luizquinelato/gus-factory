@@ -11,7 +11,7 @@ settings = get_settings()
 
 engine = create_async_engine(
     settings.async_database_url,
-    echo=settings.SQL_ECHO,
+    echo=False,          # nunca usar echo=True — adiciona handler próprio e duplica logs
     pool_pre_ping=True,
     pool_size=5,
     max_overflow=10,
