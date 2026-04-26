@@ -724,21 +724,21 @@ def collect_project_info(data: dict, manifest: dict) -> dict:
 
     # ── 5. Credenciais do Banco ──────────────────────────────────
     print(f"\n{YELLOW}── 5. Credenciais do Banco ─────────────────────────────────{RESET}")
-    db_name = prompt("Nome do banco PROD", ex_prod_db.get("name", key))
-    db_user = prompt("Usuário do banco",   ex_prod_db.get("user", key))
-    db_pass = prompt("Senha do banco",     ex_prod_db.get("pass", key))
+    db_name = prompt("Nome do banco PROD", ex_prod_db.get("name", alias))
+    db_user = prompt("Usuário do banco",   ex_prod_db.get("user", alias))
+    db_pass = prompt("Senha do banco",     ex_prod_db.get("pass", alias))
 
     # ── 6. RabbitMQ (se etl ON) ──────────────────────────────────
     rabbit_user_prod = rabbit_pass_prod = rabbit_vhost_prod = ""
     rabbit_user_dev  = rabbit_pass_dev  = rabbit_vhost_dev  = ""
     if "etl" in features_on:
         print(f"\n{YELLOW}── 6. RabbitMQ (ETL) ───────────────────────────────────────{RESET}")
-        rabbit_user_prod  = prompt("RABBITMQ_USER_PROD",  key)
-        rabbit_pass_prod  = prompt("RABBITMQ_PASS_PROD",  key)
-        rabbit_vhost_prod = prompt("RABBITMQ_VHOST_PROD", f"{key}_etl")
-        rabbit_user_dev   = prompt("RABBITMQ_USER_DEV",   key)
-        rabbit_pass_dev   = prompt("RABBITMQ_PASS_DEV",   key)
-        rabbit_vhost_dev  = prompt("RABBITMQ_VHOST_DEV",  f"{key}_etl_dev")
+        rabbit_user_prod  = prompt("RABBITMQ_USER_PROD",  alias)
+        rabbit_pass_prod  = prompt("RABBITMQ_PASS_PROD",  alias)
+        rabbit_vhost_prod = prompt("RABBITMQ_VHOST_PROD", f"{alias}_etl")
+        rabbit_user_dev   = prompt("RABBITMQ_USER_DEV",   alias)
+        rabbit_pass_dev   = prompt("RABBITMQ_PASS_DEV",   alias)
+        rabbit_vhost_dev  = prompt("RABBITMQ_VHOST_DEV",  f"{alias}_etl_dev")
 
     # ── 7. Admin inicial ─────────────────────────────────────────
     print(f"\n{YELLOW}── 7. Admin Inicial ────────────────────────────────────────{RESET}")

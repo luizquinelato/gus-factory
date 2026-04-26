@@ -38,11 +38,12 @@ class QueueManager:
     def _get_connection(self) -> pika.BlockingConnection:
         credentials = pika.PlainCredentials(
             self.settings.RABBITMQ_USER,
-            self.settings.RABBITMQ_PASS,
+            self.settings.RABBITMQ_PASSWORD,
         )
         params = pika.ConnectionParameters(
             host=self.settings.RABBITMQ_HOST,
             port=self.settings.RABBITMQ_PORT,
+            virtual_host=self.settings.RABBITMQ_VHOST,
             credentials=credentials,
             heartbeat=10,
             blocked_connection_timeout=5,
@@ -82,10 +83,11 @@ class QueueManager:
             f"http://{self.settings.RABBITMQ_HOST}"
             f":{self.settings.RABBITMQ_MANAGEMENT_PORT}"
         )
+        vhost_enc = self.settings.RABBITMQ_VHOST.replace("/", "%2F")
         try:
             resp = httpx.get(
-                f"{base_url}/api/queues/%2F/{queue_name}",
-                auth=(self.settings.RABBITMQ_USER, self.settings.RABBITMQ_PASS),
+                f"{base_url}/api/queues/{vhost_enc}/{queue_name}",
+                auth=(self.settings.RABBITMQ_USER, self.settings.RABBITMQ_PASSWORD),
                 timeout=5.0,
             )
             if resp.status_code == 200:

@@ -47,10 +47,10 @@ canonical_ports:
   qdrant_grpc_dev:     6342
 
 canonical_db:
-  name_prod:  saas_blueprint_v1
-  name_dev:   saas_blueprint_v1_dev
-  user:       saas_blueprint_v1
-  password:   saas_blueprint_v1
+  name_prod:  blueprint
+  name_dev:   blueprint_dev
+  user:       blueprint
+  password:   blueprint
 
 canonical_timezone: America/Sao_Paulo
 

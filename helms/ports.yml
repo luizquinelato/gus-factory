@@ -102,14 +102,12 @@ projects:
     conflicts_with: []
     prod:
       svc: {backend: 10000, auth: 10100, frontend: 5177, etl_frontend: 3344}
-      db: {port: 5444, replica: 5445, name: saas_blueprint_v1, user: saas_blueprint_v1,
-        pass: saas_blueprint_v1}
-      rabbit: {user: guest, pass: guest, vhost: /}
+      db: {port: 5444, replica: 5445, name: blueprint, user: blueprint, pass: blueprint}
+      rabbit: {user: blueprint, pass: blueprint, vhost: blueprint_etl}
     dev:
       svc: {backend: 10010, auth: 10110, frontend: 5178, etl_frontend: 3345}
-      db: {port: 5446, replica: 5447, name: saas_blueprint_v1_dev, user: saas_blueprint_v1,
-        pass: saas_blueprint_v1}
-      rabbit: {user: guest, pass: guest, vhost: /}
+      db: {port: 5446, replica: 5447, name: blueprint_dev, user: blueprint, pass: blueprint}
+      rabbit: {user: blueprint, pass: blueprint, vhost: blueprint_etl_dev}
     extra_ports:
     - {name: redis, port: 6385, proto: tcp}
     - {name: qdrant, port: 6343, proto: http}

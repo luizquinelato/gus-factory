@@ -1,12 +1,12 @@
-import os
+﻿import os
 from functools import lru_cache
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _env = os.getenv("APP_ENV", "prod")
 
-# Resolve o .env a partir do arquivo, independente do cwd de execução.
-# config.py → core/ → app/ → auth/ → services/ → project root
+# Resolve o .env a partir do arquivo, independente do cwd de execuÃ§Ã£o.
+# config.py â†’ core/ â†’ app/ â†’ auth/ â†’ services/ â†’ project root
 _project_root = Path(__file__).resolve().parent.parent.parent.parent.parent
 _env_file     = _project_root / f".env.{_env}"
 
@@ -20,18 +20,18 @@ class Settings(BaseSettings):
     # Database
     POSTGRES_HOST: str = "localhost"
     POSTGRES_PORT: int = 5432
-    POSTGRES_USER: str = "saas_blueprint_v1"
-    POSTGRES_PASSWORD: str = "saas_blueprint_v1"
-    POSTGRES_DATABASE: str = "saas_blueprint_v1"
+    POSTGRES_USER: str = "blueprint"
+    POSTGRES_PASSWORD: str = "blueprint"
+    POSTGRES_DATABASE: str = "blueprint"
     SQL_ECHO: bool = False
 
     # Security
     JWT_SECRET_KEY: str = "dev-secret"
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 5      # Token curto — refresh automático mantém a sessão
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 5      # Token curto â€” refresh automÃ¡tico mantÃ©m a sessÃ£o
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7        # Refresh token expira em 7 dias
     # Chave compartilhada entre backend e auth para proteger /token/validate
-    # Deixar vazio desativa a verificação (dev). Em prod deve ser uma string aleatória longa.
+    # Deixar vazio desativa a verificaÃ§Ã£o (dev). Em prod deve ser uma string aleatÃ³ria longa.
     INTERNAL_API_KEY: str = ""
 
     model_config = SettingsConfigDict(
@@ -51,3 +51,4 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+

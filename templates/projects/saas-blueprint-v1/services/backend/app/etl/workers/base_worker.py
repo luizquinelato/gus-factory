@@ -88,10 +88,11 @@ class BaseWorker:
     # ── internal ─────────────────────────────────────────────────────────────
 
     def _get_connection(self) -> pika.BlockingConnection:
-        credentials = pika.PlainCredentials(self.settings.RABBITMQ_USER, self.settings.RABBITMQ_PASS)
+        credentials = pika.PlainCredentials(self.settings.RABBITMQ_USER, self.settings.RABBITMQ_PASSWORD)
         params = pika.ConnectionParameters(
             host=self.settings.RABBITMQ_HOST,
             port=self.settings.RABBITMQ_PORT,
+            virtual_host=self.settings.RABBITMQ_VHOST,
             credentials=credentials,
             heartbeat=60,
             blocked_connection_timeout=30,

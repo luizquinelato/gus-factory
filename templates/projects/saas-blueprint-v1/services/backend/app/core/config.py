@@ -1,12 +1,12 @@
-import os
+﻿import os
 from functools import lru_cache
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _env = os.getenv("APP_ENV", "prod")
 
-# Resolve o .env a partir do arquivo, independente do cwd de execução.
-# config.py → core/ → app/ → backend/ → services/ → project root
+# Resolve o .env a partir do arquivo, independente do cwd de execuÃ§Ã£o.
+# config.py â†’ core/ â†’ app/ â†’ backend/ â†’ services/ â†’ project root
 _project_root = Path(__file__).resolve().parent.parent.parent.parent.parent
 _env_file     = _project_root / f".env.{_env}"
 
@@ -20,9 +20,9 @@ class Settings(BaseSettings):
     # Database
     POSTGRES_HOST: str = "localhost"
     POSTGRES_PORT: int = 5432
-    POSTGRES_USER: str = "saas_blueprint_v1"
-    POSTGRES_PASSWORD: str = "saas_blueprint_v1"
-    POSTGRES_DATABASE: str = "saas_blueprint_v1"
+    POSTGRES_USER: str = "blueprint"
+    POSTGRES_PASSWORD: str = "blueprint"
+    POSTGRES_DATABASE: str = "blueprint"
     SQL_ECHO: bool = False
 
     # Security
@@ -32,23 +32,24 @@ class Settings(BaseSettings):
     INTERNAL_API_KEY: str = ""
 
     # @IF redis
-    # Cache — porta 6385 (prod saas-blueprint-v1), sobreposta pelo .env
+    # Cache â€” porta 6385 (prod saas-blueprint-v1), sobreposta pelo .env
     REDIS_URL: str = "redis://localhost:6385/0"
     # @ENDIF redis
 
     # @IF etl
     # RabbitMQ
     RABBITMQ_HOST: str = "localhost"
-    RABBITMQ_PORT: int = 5672
-    RABBITMQ_USER: str = "guest"
-    RABBITMQ_PASS: str = "guest"
-    RABBITMQ_MANAGEMENT_PORT: int = 15672
+    RABBITMQ_PORT: int = 5675
+    RABBITMQ_USER: str = "blueprint"
+    RABBITMQ_PASSWORD: str = "blueprint"
+    RABBITMQ_VHOST: str = "blueprint_etl"
+    RABBITMQ_MANAGEMENT_PORT: int = 15675
     # @ENDIF etl
 
-    # Auth service URL — sempre localhost (roda no host)
+    # Auth service URL â€” sempre localhost (roda no host)
     AUTH_SERVICE_URL: str = "http://localhost:10100"
 
-    # CORS — frontend principal (5177 prod / 5178 dev) + ETL (3344 prod / 3345 dev)
+    # CORS â€” frontend principal (5177 prod / 5178 dev) + ETL (3344 prod / 3345 dev)
     FRONTEND_URL: str = "http://localhost:5177"
     ETL_FRONTEND_URL: str = "http://localhost:3344"
     BACKEND_CORS_ORIGINS: list[str] = [
@@ -66,7 +67,7 @@ class Settings(BaseSettings):
 
     @property
     def database_url(self) -> str:
-        """URL síncrona — usada apenas pelo migration runner e scripts."""
+        """URL sÃ­ncrona â€” usada apenas pelo migration runner e scripts."""
         return (
             f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
             f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DATABASE}"
@@ -74,7 +75,7 @@ class Settings(BaseSettings):
 
     @property
     def async_database_url(self) -> str:
-        """URL assíncrona — usada pelo engine principal da aplicação (asyncpg)."""
+        """URL assÃ­ncrona â€” usada pelo engine principal da aplicaÃ§Ã£o (asyncpg)."""
         return (
             f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
             f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DATABASE}"
@@ -84,3 +85,4 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
