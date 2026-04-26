@@ -220,3 +220,40 @@ CREATE TABLE integrations (
     UNIQUE(tenant_id, provider)
 );
 ```
+
+## 💾 Backup and Restore
+
+Python scripts in `scripts/database/` perform backup and restore via `pg_dump`/`pg_restore` using the project's Docker container.
+
+### Backup
+
+```bash
+# From the project root or via gus CLI:
+python scripts/database/backup.py --prod          # PROD dump → backups/{alias}_prod_{ts}.backup
+python scripts/database/backup.py --dev           # DEV dump  → backups/{alias}_dev_{ts}.backup
+python scripts/database/backup.py --prod --sql    # + plain .sql for inspection
+
+# Via gus CLI (preferred):
+gus dbbackup blueprint               # PROD
+gus dbbackup blueprint-dev           # DEV
+gus dbbackup all-prod --sql          # PROD of all projects
+```
+
+- Format: **Custom** (`-Fc`) — compressed, supports selective restore
+- Output: `backups/{alias}_{env}_{timestamp}.backup`
+- The `backups/` folder is in `.gitignore` — never committed (may contain sensitive data)
+
+### Restore
+
+```bash
+python scripts/database/restore.py --dev          # interactive list of available backups
+python scripts/database/restore.py --prod file.backup  # direct restore
+
+# Via gus CLI:
+gus dbrestore blueprint-dev          # interactive list → restore to DEV
+gus dbrestore blueprint              # interactive list → restore to PROD
+```
+
+- Uses `--no-owner --no-acl` — allows restoring PROD backups to a DEV environment without permission errors (safe cross-env)
+- Requires confirmation by typing the project alias before DROP/CREATE is executed
+- Detects and warns when the backup is from a different environment than the target (e.g., `[PROD] → DEV`)

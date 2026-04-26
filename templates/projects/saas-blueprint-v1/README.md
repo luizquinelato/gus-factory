@@ -11,6 +11,7 @@ Plataforma SaaS multi-tenant com autenticação JWT, sistema de cores dinâmico 
 | Auth Service | 10100 | 10110 | Host (uvicorn) |
 | Backend API | 10000 | 10010 | Host (uvicorn) |
 | Frontend | 5177 | 5178 | Host (vite) |
+| Frontend ETL | 3344 | 3345 | Host (vite) |
 | PostgreSQL | 5444 | 5446 | Docker |
 | Redis | 6385 | 6383 | Docker |
 | RabbitMQ | 5675/15675 | 5674/15674 | Docker |
@@ -48,7 +49,7 @@ docker compose -f docker-compose.db.yml down
 
 ```bash
 # Configurar DATABASE_URL (DEV)
-$env:DATABASE_URL="postgresql://saas_blueprint_v1:saas_blueprint_v1@localhost:5446/saas_blueprint_v1_dev"
+$env:DATABASE_URL="postgresql://blueprint:blueprint@localhost:5446/blueprint_dev"
 
 # Aplicar todas as migrations
 python services/backend/scripts/migration_runner.py --apply-all
@@ -95,12 +96,18 @@ npm run dev
 
 ```
 /
+├── backups/            # Dumps gerados por scripts/database/backup.py (gitignored)
 ├── docs/               # Documentação técnica
-├── scripts/            # Scripts utilitários (setup_venvs.py)
+├── scripts/
+│   ├── database/
+│   │   ├── backup.py   # pg_dump via Docker → backups/{alias}_{env}_{timestamp}.backup
+│   │   └── restore.py  # pg_restore interativo com lista de backups disponíveis
+│   └── setup_venvs.py
 ├── services/
 │   ├── auth/           # Serviço de autenticação (JWT)
 │   ├── backend/        # API principal (FastAPI)
-│   └── frontend/       # SPA React (Vite + TypeScript)
+│   ├── frontend/       # SPA React (Vite + TypeScript)
+│   └── frontend-etl/   # Painel ETL (Vite + TypeScript)
 ├── .env.dev            # Variáveis DEV (não commitar)
 ├── .env.prod           # Variáveis PROD (não commitar)
 ├── .env.example        # Template público

@@ -35,9 +35,6 @@ FRONTEND_PORT_DEV=
 # Frontend ETL — painel React/Vite de gestão ETL (sem backend próprio; deixe vazio se não usar)
 FRONTEND_ETL_PORT=
 FRONTEND_ETL_PORT_DEV=
-# Frontend ETL — painel React/Vite de gestão ETL (sem backend próprio; vazio se não usar)
-FRONTEND_ETL_PORT=
-FRONTEND_ETL_PORT_DEV=
 
 ## 4. Banco de Dados
 # ATENÇÃO: Quando DB_ENABLE_REPLICA=true, certifique-se de que as portas

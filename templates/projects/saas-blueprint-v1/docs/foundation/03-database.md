@@ -300,6 +300,43 @@ CREATE TABLE migration_history (
 );
 ```
 
+## 💾 Backup e Restore
+
+Scripts Python em `scripts/database/` fazem backup e restore via `pg_dump`/`pg_restore` usando o container Docker do projeto.
+
+### Backup
+
+```bash
+# Da raiz do projeto ou via gus CLI:
+python scripts/database/backup.py --prod          # dump PROD → backups/{alias}_prod_{ts}.backup
+python scripts/database/backup.py --dev           # dump DEV  → backups/{alias}_dev_{ts}.backup
+python scripts/database/backup.py --prod --sql    # + .sql plain text para inspeção
+
+# Via gus CLI (preferencial):
+gus dbbackup blueprint               # PROD
+gus dbbackup blueprint-dev           # DEV
+gus dbbackup all-prod --sql          # PROD de todos os projetos
+```
+
+- Formato: **Custom** (`-Fc`) — comprimido, suporta restore seletivo
+- Saída: `backups/{alias}_{env}_{timestamp}.backup`
+- A pasta `backups/` está no `.gitignore` — nunca commitada (pode conter dados sensíveis)
+
+### Restore
+
+```bash
+python scripts/database/restore.py --dev          # lista backups disponíveis interativamente
+python scripts/database/restore.py --prod arquivo.backup  # restore direto
+
+# Via gus CLI:
+gus dbrestore blueprint-dev          # lista interativa → restore no DEV
+gus dbrestore blueprint              # lista interativa → restore no PROD
+```
+
+- Usa `--no-owner --no-acl` — permite restaurar backups PROD em ambiente DEV sem erros de permissão (cross-env seguro)
+- Exige confirmação digitando o alias do projeto antes de executar o DROP/CREATE
+- Detecta e avisa quando o backup é de ambiente diferente do destino (ex: `[PROD] → DEV`)
+
 ### 11. integrations
 Gerencia as integrações de IA, Embeddings e sistemas externos por tenant.
 ```sql

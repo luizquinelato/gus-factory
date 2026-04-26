@@ -23,66 +23,110 @@ O Docker Compose gerencia **exclusivamente os serviços de infraestrutura**. Os 
 
 O `docker-compose.db.yml` é a única fonte de verdade para subir a infraestrutura.
 
-### `docker-compose.db.yml` (Infraestrutura — Dev e Prod)
+### Convenção de nomes de containers
+
+```
+Docker project name:  gus-{alias}        (PROD)   gus-{alias}-dev   (DEV)
+Container name:       {alias}-{serviço}  (PROD)   {alias}-{serviço}-dev (DEV)
+```
+
+Exemplo com alias `blueprint`:
+
+| Serviço | Container PROD | Container DEV |
+|---|---|---|
+| PostgreSQL | `blueprint-postgres` | `blueprint-postgres-dev` |
+| Réplica | `blueprint-postgres-replica` | `blueprint-postgres-replica-dev` |
+| Redis | `blueprint-redis` | `blueprint-redis-dev` |
+| RabbitMQ | `blueprint-rabbitmq` | `blueprint-rabbitmq-dev` |
+| Qdrant | `blueprint-qdrant` | `blueprint-qdrant-dev` |
+
+> O prefixo `gus-` fica **apenas no project name** (agrupador no Docker Desktop). Os containers individuais usam `{alias}-{serviço}` sem o prefixo `gus-`.
+
+### `docker-compose.db.yml` (Infraestrutura PROD)
 
 ```yaml
 # docker-compose.db.yml — APENAS infraestrutura (DB, Cache, Vector DB, Queue)
 # NÃO adicione serviços de aplicação aqui.
 
+name: gus-blueprint   # gus-{alias} — agrupador no Docker Desktop
+
 services:
-  db-dev:
-    image: postgres:{{ DB_VERSION }}
-    container_name: {{ PROJECT_NAME }}-db-dev
+  postgres:
+    image: postgres:18
+    container_name: blueprint-postgres   # {alias}-postgres
     environment:
-      POSTGRES_USER: {{ DB_USER }}
-      POSTGRES_PASSWORD: {{ DB_PASSWORD_DEV }}
-      POSTGRES_DB: {{ DB_NAME_DEV }}
+      POSTGRES_USER: blueprint
+      POSTGRES_PASSWORD: blueprint
+      POSTGRES_DB: blueprint
     ports:
-      - "{{ DB_PORT_DEV }}:5432"
+      - "5444:5432"
     volumes:
-      - db_data_dev:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U {{ DB_USER }}"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+      - postgres_data:/var/lib/postgresql/data
 
-  # Se {{ DB_ENABLE_REPLICA }} = true
-  db-dev-replica:
-    image: postgres:{{ DB_VERSION }}
-    container_name: {{ PROJECT_NAME }}-db-dev-replica
-    environment:
-      POSTGRES_USER: {{ DB_USER }}
-      POSTGRES_PASSWORD: {{ DB_PASSWORD_DEV }}
-      POSTGRES_DB: {{ DB_NAME_DEV }}
-    ports:
-      - "{{ DB_PORT_DEV_REPLICA }}:5432"
-    # Configuração de replicação omitida por brevidade
+  # Feature: replica
+  postgres-replica:
+    container_name: blueprint-postgres-replica
+    # ...
 
-  # Se {{ DOCKER_CACHE }} = true
-  cache-dev:
+  # Feature: redis
+  redis:
     image: redis:alpine
-    container_name: {{ PROJECT_NAME }}-cache-dev
+    container_name: blueprint-redis
     ports:
-      - "6379:6379"
+      - "6385:6379"
 
-  # Se {{ DOCKER_QUEUE }} = true
-  queue-dev:
+  # Feature: rabbitmq
+  rabbitmq:
     image: rabbitmq:3-management
-    container_name: {{ PROJECT_NAME }}-queue-dev
+    container_name: blueprint-rabbitmq
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "5675:5672"
+      - "15675:15672"
 
-  # Se {{ DOCKER_EMBEDDING_DB }} = true
-  vector-db-dev:
+  # Feature: qdrant
+  qdrant:
     image: qdrant/qdrant
-    container_name: {{ PROJECT_NAME }}-vector-dev
+    container_name: blueprint-qdrant
     ports:
-      - "6333:6333"
+      - "6343:6333"
+      - "6344:6334"
 
 volumes:
-  db_data_dev:
+  postgres_data:
+```
+
+### `docker-compose.db.dev.yml` (Infraestrutura DEV)
+
+```yaml
+name: gus-blueprint-dev   # gus-{alias}-dev
+
+services:
+  postgres:
+    container_name: blueprint-postgres-dev   # {alias}-postgres-dev
+    ports:
+      - "5446:5432"
+
+  postgres-replica:
+    container_name: blueprint-postgres-replica-dev   # {alias}-postgres-replica-dev
+    ports:
+      - "5447:5432"
+
+  redis:
+    container_name: blueprint-redis-dev
+    ports:
+      - "6383:6379"
+
+  rabbitmq:
+    container_name: blueprint-rabbitmq-dev
+    ports:
+      - "5674:5672"
+      - "15674:15672"
+
+  qdrant:
+    container_name: blueprint-qdrant-dev
+    ports:
+      - "6341:6333"
+      - "6342:6334"
 ```
 
 ## 🔐 2. Variáveis de Ambiente (.env)

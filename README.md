@@ -159,6 +159,8 @@ Aliases definidos em `ports.yml` (`alias:`) também são aceitos.
 |  | `gus dkdown <proj...> -v` | Down + remove volumes |
 |  | `gus dks <proj...>` | `docker ps` filtrado por projeto |
 |  | `gus dkl <proj...>` | Logs em nova aba |
+| **Backup/Restore** | `gus dbbackup <proj...> \| all \| all-dev \| all-prod [--sql]` | Gera `.backup` (+ `.sql` opcional) via pg_dump |
+|  | `gus dbrestore <proj...> \| all \| all-dev \| all-prod` | Restaura backup com lista interativa |
 | **Migrations** | `gus dbm <proj...>` | Aplica migrations pendentes |
 |  | `gus dbmv <proj> <ver>` / `gus dbrv <proj> <ver>` | Apply / rollback até versão N |
 |  | `gus dbmc <proj> <nome>` | Cria nova migration |
