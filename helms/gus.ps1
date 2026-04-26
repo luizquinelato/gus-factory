@@ -12,6 +12,9 @@
 #             gus dks       [proj...] | all   -- docker ps filtrado
 #             gus dkl       [proj...] | all   -- logs em nova aba
 #
+# BACKUP/REST gus dbbackup  [proj...] | all | all-dev | all-prod [--sql]
+#             gus dbrestore [proj...] | all | all-dev | all-prod
+#
 # MIGRATIONS  gus dbm  [proj...] | all  -- aplica pendentes
 #             gus dbmv {proj} <ver>     -- aplica ate versao
 #             gus dbmc {proj} <nome>    -- cria migration
@@ -271,6 +274,59 @@ function _gus-db-runner {
             else                   { & $py $runner --rollback-to $extra }
         }
     }
+    Pop-Location
+}
+
+# --- DB Backup / Restore -------------------------------------------
+function _gus-dbbackup {
+    param([string]$proj, [string]$env, [hashtable]$all, [bool]$withSql = $false)
+    if (-not $all.ContainsKey($proj)) {
+        Write-Host "[gus] Projeto '$proj' nao encontrado. Use: gus list" -ForegroundColor Red; return
+    }
+    $root  = $all[$proj].root
+    $alias = $all[$proj].alias
+    if (-not $alias) { $alias = $proj }
+
+    $script = "$root\scripts\database\backup.py"
+    if (-not (Test-Path $script)) {
+        Write-Host "[gus/$proj] scripts\database\backup.py nao encontrado em $root" -ForegroundColor Red; return
+    }
+
+    $py = @(
+        "$root\services\backend\.venv\Scripts\python.exe",
+        "$root\services\backend-service\.venv\Scripts\python.exe"
+    ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if (-not $py) { $py = "python" }
+
+    Push-Location $root
+    $pyArgs = @("--$env", "--alias", $alias)
+    if ($withSql) { $pyArgs += "--sql" }
+    & $py $script @pyArgs
+    Pop-Location
+}
+
+function _gus-dbrestore {
+    param([string]$proj, [string]$env, [hashtable]$all)
+    if (-not $all.ContainsKey($proj)) {
+        Write-Host "[gus] Projeto '$proj' nao encontrado. Use: gus list" -ForegroundColor Red; return
+    }
+    $root  = $all[$proj].root
+    $alias = $all[$proj].alias
+    if (-not $alias) { $alias = $proj }
+
+    $script = "$root\scripts\database\restore.py"
+    if (-not (Test-Path $script)) {
+        Write-Host "[gus/$proj] scripts\database\restore.py nao encontrado em $root" -ForegroundColor Red; return
+    }
+
+    $py = @(
+        "$root\services\backend\.venv\Scripts\python.exe",
+        "$root\services\backend-service\.venv\Scripts\python.exe"
+    ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if (-not $py) { $py = "python" }
+
+    Push-Location $root
+    & $py $script "--$env" "--alias" $alias
     Pop-Location
 }
 
@@ -567,6 +623,10 @@ function _gus-help {
     Write-Host "    gus dks       [proj...]        docker ps filtrado por projeto"
     Write-Host "    gus dkl       [proj...]        docker logs em nova aba por projeto"
     Write-Host ""
+    Write-Host "  BACKUP / RESTORE  (args: proj | proj-dev | all | all-dev | all-prod; backups em backups/)" -ForegroundColor White
+    Write-Host "    gus dbbackup  [proj...] | all | all-dev | all-prod [--sql]  Gera backup .backup (+ .sql opcional)"
+    Write-Host "    gus dbrestore [proj...] | all | all-dev | all-prod          Restaura backup (lista interativa)"
+    Write-Host ""
     Write-Host "  MIGRATIONS  (args: proj | proj-dev | all = todos | all-dev = so DEV | all-prod = so PROD)" -ForegroundColor White
     Write-Host "    gus dbm  [proj...]              Aplica migrations pendentes"
     Write-Host "    gus dbmv {proj|proj-dev} <ver>  Aplica ate versao especifica"
@@ -618,6 +678,12 @@ function _gus-help {
     Write-Host "    gus dkstart all                  # inicia containers parados"
     Write-Host "    gus dkrestart pulse-dev          # reinicia pulse DEV"
     Write-Host "    gus dks all                      # status containers de todos"
+    Write-Host "    gus dbbackup blueprint               # backup PROD do blueprint"
+    Write-Host "    gus dbbackup blueprint-dev           # backup DEV do blueprint"
+    Write-Host "    gus dbbackup all-dev --sql           # backup DEV de todos + .sql"
+    Write-Host "    gus dbrestore blueprint              # restore PROD do blueprint (lista backups)"
+    Write-Host "    gus dbrestore blueprint-dev          # restore DEV do blueprint (lista backups)"
+    Write-Host "    gus dbrestore all-prod               # restore PROD de todos (interativo por projeto)"
     Write-Host "    gus dbm all-dev              # migra DEV de todos"
     Write-Host "    gus dbmv pulse-dev 0003      # aplica ate 0003 no pulse DEV"
     Write-Host "    gus dbmc pulse add_audit_log # cria migration no pulse PROD"
@@ -678,6 +744,24 @@ function gus {
         'dkl' {
             if ($rest.Count -eq 0) { Write-Host "[gus] Uso: gus dkl {proj...} | all | all-dev | all-prod" -ForegroundColor Yellow; return }
             _gus-docker-logs-tab (_gus-resolve2 $rest $all) $all
+        }
+
+        # ── DB Backup / Restore ───────────────────────────────────────
+        'dbbackup' {
+            $withSql = $rest -contains '--sql'
+            $targets = @($rest | Where-Object { $_ -ne '--sql' })
+            if ($targets.Count -eq 0) {
+                Write-Host "[gus] Uso: gus dbbackup {proj...} | all | all-dev | all-prod [--sql]" -ForegroundColor Yellow; return
+            }
+            $pairs = _gus-resolve2 $targets $all
+            foreach ($pair in $pairs) { _gus-dbbackup $pair.proj $pair.env $all $withSql }
+        }
+        'dbrestore' {
+            if ($rest.Count -eq 0) {
+                Write-Host "[gus] Uso: gus dbrestore {proj...} | all | all-dev | all-prod" -ForegroundColor Yellow; return
+            }
+            $pairs = _gus-resolve2 $rest $all
+            foreach ($pair in $pairs) { _gus-dbrestore $pair.proj $pair.env $all }
         }
 
         # ── Migrations ────────────────────────────────────────────────

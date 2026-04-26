@@ -1,0 +1,4 @@
+# Backups gerados por scripts/database/backup.py
+# Nunca versionar — podem conter dados sensíveis
+*.backup
+*.sql
