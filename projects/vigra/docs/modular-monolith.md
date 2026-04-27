@@ -43,8 +43,12 @@ services/backend/app/
 ├── core/                         # Shared Kernel — usado por TODOS os módulos
 │   ├── config.py
 │   ├── database.py
+│   ├── event_bus.py              # Event Bus in-process (emit / emit_reliable)
+│   ├── limiter.py                # Rate limiting (slowapi)
 │   ├── logging_config.py
-│   └── event_bus.py              # Event Bus in-process
+│   ├── outbox_processor.py       # Background task — processa events_outbox
+│   ├── rbac.py                   # Controle de permissões (roles/permissions)
+│   └── redis_client.py           # Cache e pub/sub
 ├── dependencies/                 # Auth, pagination — infraestrutura transversal
 ├── schemas/                      # APENAS schemas compartilhados (common.py)
 ├── modules/                      # UM diretório por módulo de negócio
@@ -68,7 +72,8 @@ services/backend/app/
 │   ├── logistica/
 │   ├── contabilidade/
 │   └── ia/
-├── routers/                      # Routers do Core (auth, users, health, colors)
+├── routers/                      # Routers do Core (auth, users, health, colors,
+│   │                             #   settings, admin, outbox)
 ├── services/                     # Services do Core (color, user)
 └── main.py
 ```
@@ -98,39 +103,25 @@ Imports permitidos:
 | `modules/vendas/` | `modules/cadastros/service.py` | ✅ Sim (via interface pública) |
 | `modules/vendas/` | `modules/estoque/service.py` | ❌ **Não** (usa Event Bus) |
 | `modules/vendas/` | `modules/estoque/router.py` | ❌ **Nunca** |
+| `modules/vendas/` | `modules/estoque/events.py` | ❌ **Nunca** |
+| `modules/vendas/` | `modules/estoque` (direto) | ❌ **Nunca** (atinge `__init__.py`) |
 
-A única exceção é quando o módulo B expõe uma **interface pública de leitura** (métodos do service) que o módulo A precisa para compor dados. Mesmo assim, o módulo A depende do contrato (assinatura do método), não da implementação.
+A única exceção é quando o módulo B expõe uma **interface pública de leitura** (métodos do `.service`) que o módulo A precisa para compor dados. Mesmo assim, o módulo A depende do contrato (assinatura do método), não da implementação.
+
+**Regra precisa (allowlist):** somente `from app.modules.X.service import ...` é permitido cross-módulo. Qualquer outro caminho — incluindo `from app.modules.X import ...` (atinge `__init__.py`), `.router`, `.repository`, `.schemas`, `.events`, `.utils` — é proibido.
 
 #### Enforcement automático (pre-commit hook)
 
-Sem automação, essa regra degrada em semanas. O hook abaixo rejeita commits com imports cruzados proibidos:
+Sem automação, essa regra degrada em semanas. O script `scripts/check_module_imports.py` implementa **allowlist**: qualquer import cross-módulo que não seja exatamente `.service` é rejeitado:
 
 ```python
-# scripts/check_module_imports.py  (rodado no pre-commit)
-import ast, sys
-from pathlib import Path
+# scripts/check_module_imports.py  (trecho ilustrativo — veja o arquivo completo)
+ALLOWED_CROSS_MODULE_SUBMODULE = "service"
 
-MODULES_DIR = Path("services/backend/app/modules")
-errors = []
-
-for py_file in MODULES_DIR.rglob("*.py"):
-    module_name = py_file.parts[py_file.parts.index("modules") + 1]
-    tree = ast.parse(py_file.read_text(encoding="utf-8"))
-    for node in ast.walk(tree):
-        if not isinstance(node, (ast.Import, ast.ImportFrom)):
-            continue
-        name = getattr(node, "module", "") or ""
-        # Detecta import de outro módulo que não seja via service.py
-        if "app.modules." in name:
-            target = name.split("app.modules.")[1].split(".")[0]
-            allowed = name.endswith(".service")
-            if target != module_name and not allowed:
-                errors.append(f"{py_file}:{node.lineno} — import proibido: {name}")
-
-if errors:
-    print("❌ Imports cruzados proibidos entre módulos:")
-    for e in errors: print(f"  {e}")
-    sys.exit(1)
+# submodule = quarta parte do import (ex: "router" em app.modules.X.router)
+# submodule = "" quando importa direto de app.modules.X (via __init__.py)
+if submodule != ALLOWED_CROSS_MODULE_SUBMODULE:
+    errors.append(...)  # qualquer coisa que não seja .service é violação
 ```
 
 ```yaml
@@ -376,7 +367,7 @@ As migrations continuam centralizadas em `scripts/migrations/` (runner único), 
 | Faixa | Módulo |
 |---|---|
 | `0001`–`0002` | **Framework** — Core (schema base + seed) — **não modificar** |
-| `0003` | **Framework** — ETL schema (`etl_job_errors`) — **não modificar** |
+| `0003` | **Framework** — ETL schema (`etl_job_errors`) — reservado, ETL ainda não implementado no Vigra |
 | `0004` | **Framework** — Event Bus (`events_outbox`) — **não modificar** |
 | `0005`–`0009` | Cadastros |
 | `0010`–`0019` | Clientes & CRM |
@@ -459,7 +450,7 @@ A Sidebar e o React Router carregam rotas condicionalmente com base nos módulos
 
 ---
 
-## 9. Pontos de Atenção e Dívidas Implícitas
+## 11. Pontos de Atenção e Dívidas Implícitas
 
 Cinco áreas que a arquitetura assume mas que precisam de disciplina ativa para não virarem bugs silenciosos.
 
@@ -554,7 +545,7 @@ Registrar módulos via `import app.modules.X` em `main.py` é simples e correto 
 
 ---
 
-## 10. Caminho de Evolução Documentado
+## 12. Caminho de Evolução Documentado
 
 A arquitetura pavimenta dois saltos explícitos sem reescrita de módulos:
 
@@ -569,7 +560,7 @@ O custo dessa flexibilidade é disciplina diária: se o pre-commit hook for desa
 
 ---
 
-## 11. O Que Torna Este Modular Monolith Funcional
+## 13. O Que Torna Este Modular Monolith Funcional
 
 Três decisões fazem o sistema funcionar como prometido:
 

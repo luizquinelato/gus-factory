@@ -348,6 +348,33 @@ await db.commit()
 | `NOT NULL` | `NULL` | 🟢 Processado |
 | `NULL` | `NOT NULL` | 🔴 Dead-letter (esgotou `max_attempts`) |
 
+**Convenção de idempotência — obrigatória para tabelas afetadas por `emit_reliable`:**
+
+O `OutboxProcessor` entrega eventos com semântica *at-least-once* (pode re-entregar em falha). Toda tabela que recebe escritas a partir de um handler do outbox **deve** ter uma coluna de idempotência:
+
+```sql
+-- Adicione em qualquer tabela afetada por emit_reliable (ex: migration do módulo)
+ALTER TABLE contas_a_receber
+    ADD COLUMN IF NOT EXISTS outbox_event_id BIGINT UNIQUE;
+```
+
+No handler, use `ON CONFLICT DO NOTHING` para garantir exatamente um efeito por evento:
+
+```python
+async def on_order_confirmed(payload: dict) -> None:
+    event_id  = payload["__event_id__"]   # injetado pelo OutboxProcessor
+    tenant_id = payload["__tenant_id__"]  # fonte de verdade (nunca payload.get("tenant_id"))
+    async with AsyncSessionLocal() as db:
+        await db.execute(text("""
+            INSERT INTO contas_a_receber (valor, tenant_id, outbox_event_id)
+            VALUES (:valor, :tenant_id, :event_id)
+            ON CONFLICT (outbox_event_id) DO NOTHING
+        """), {"valor": payload["total"], "tenant_id": tenant_id, "event_id": event_id})
+        await db.commit()
+```
+
+> **Regra:** se o handler cria ou modifica registros financeiros ou de estoque, a coluna `outbox_event_id BIGINT UNIQUE` é obrigatória na tabela destino.
+
 **Monitoramento:** `Configurações → Outbox` (admin-only) — stats, eventos recentes, retry/descarte de dead-letters.
 
 ## 💾 Backup e Restore

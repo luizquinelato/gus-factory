@@ -7,15 +7,29 @@ Enforcer estático de isolamento do Modular Monolith.
 Analisa via AST todos os arquivos Python dentro de `app/modules/` e rejeita
 imports cruzados ilegais entre módulos.
 
-Regras
-------
-  PROIBIDO   from app.modules.X.router     import ...
-  PROIBIDO   from app.modules.X.repository import ...
-  PROIBIDO   from app.modules.X.schemas    import ...  (use schemas/common.py)
-  PERMITIDO  from app.modules.X.service    import ...  (contrato público)
-  PERMITIDO  from app.core.*               import ...
-  PERMITIDO  from app.dependencies.*       import ...
-  PERMITIDO  from app.schemas.*            import ...
+Regra (allowlist — mais restritiva)
+-------------------------------------
+  ÚNICO import cross-módulo permitido:
+    from app.modules.X.service import ...   ← contrato público síncrono
+
+  TUDO o mais é proibido, incluindo:
+    from app.modules.X          import ...  (atinge __init__.py)
+    from app.modules.X.router   import ...
+    from app.modules.X.repository import ...
+    from app.modules.X.schemas  import ...  (use app/schemas/common.py)
+    from app.modules.X.models   import ...
+    from app.modules.X.events   import ...
+    from app.modules.X.utils    import ...
+
+  Para comunicação entre módulos use:
+    - EventBus.emit / emit_reliable      (eventos assíncronos)
+    - from app.modules.X.service import  (contrato público síncrono)
+    - app/schemas/common.py              (tipos compartilhados)
+
+  Sempre permitido (qualquer módulo pode importar):
+    from app.core.*          import ...
+    from app.dependencies.*  import ...
+    from app.schemas.*       import ...
 
 Uso
 ---
@@ -43,8 +57,8 @@ from pathlib import Path
 
 MODULES_ROOT = Path(__file__).parent.parent / "app" / "modules"
 
-# Sufixos de submódulo que são PROIBIDOS de importar de outro módulo
-FORBIDDEN_SUBMODULES = {"router", "repository", "repositories", "schemas", "models"}
+# Único submódulo que pode ser importado de outro módulo (allowlist).
+ALLOWED_CROSS_MODULE_SUBMODULE = "service"
 
 # ── Análise ───────────────────────────────────────────────────────────────────
 
@@ -85,7 +99,7 @@ def check_file(path: Path, owner_module: str) -> list[str]:
         if not module_str.startswith("app.modules."):
             continue
 
-        # app.modules.<target_module>.<submodule>
+        # app.modules.<target_module>[.<submodule>]
         parts = module_str.split(".")
         if len(parts) < 3:
             continue
@@ -97,11 +111,17 @@ def check_file(path: Path, owner_module: str) -> list[str]:
         if target_module == owner_module:
             continue
 
-        if submodule in FORBIDDEN_SUBMODULES:
+        # Allowlist: somente app.modules.<target>.service é permitido cross-módulo.
+        # Qualquer outro caminho (incluindo importar direto do __init__.py,
+        # .router, .repository, .schemas, .events, .utils etc.) é violação.
+        if submodule != ALLOWED_CROSS_MODULE_SUBMODULE:
+            if submodule:
+                reason = f"'{submodule}' é privado do módulo '{target_module}' — use '{target_module}.service'"
+            else:
+                reason = f"importar de '{target_module}' diretamente (via __init__.py) é proibido — use '{target_module}.service'"
             violations.append(
                 f"{path}:{node.lineno}: import ilegal — "
-                f"'{owner_module}' não pode importar '{module_str}' "
-                f"('{submodule}' é privado do módulo '{target_module}')"
+                f"'{owner_module}' não pode importar '{module_str}' ({reason})"
             )
 
     return violations

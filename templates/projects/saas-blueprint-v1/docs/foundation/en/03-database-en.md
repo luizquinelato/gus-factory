@@ -240,6 +240,33 @@ CREATE INDEX idx_events_outbox_pending ON events_outbox (tenant_id, created_at)
 | `NOT NULL` | `NULL` | 🟢 Processed |
 | `NULL` | `NOT NULL` | 🔴 Dead-letter (exhausted `max_attempts`) |
 
+**Idempotency convention — mandatory for tables affected by `emit_reliable`:**
+
+The `OutboxProcessor` delivers events with *at-least-once* semantics (may re-deliver on failure). Every table that receives writes from an outbox handler **must** have an idempotency column:
+
+```sql
+-- Add to any table affected by emit_reliable (e.g. in the module's migration)
+ALTER TABLE accounts_receivable
+    ADD COLUMN IF NOT EXISTS outbox_event_id BIGINT UNIQUE;
+```
+
+In the handler, use `ON CONFLICT DO NOTHING` to guarantee exactly one effect per event:
+
+```python
+async def on_order_confirmed(payload: dict) -> None:
+    event_id  = payload["__event_id__"]   # injected by OutboxProcessor
+    tenant_id = payload["__tenant_id__"]  # source of truth (never payload.get("tenant_id"))
+    async with AsyncSessionLocal() as db:
+        await db.execute(text("""
+            INSERT INTO accounts_receivable (amount, tenant_id, outbox_event_id)
+            VALUES (:amount, :tenant_id, :event_id)
+            ON CONFLICT (outbox_event_id) DO NOTHING
+        """), {"amount": payload["total"], "tenant_id": tenant_id, "event_id": event_id})
+        await db.commit()
+```
+
+> **Rule:** if the handler creates or modifies financial or stock records, the `outbox_event_id BIGINT UNIQUE` column is mandatory in the target table.
+
 **Monitoring:** `Settings → Outbox` (admin-only) — stats, recent events, retry/discard dead-letters.
 
 ### 9. integrations
