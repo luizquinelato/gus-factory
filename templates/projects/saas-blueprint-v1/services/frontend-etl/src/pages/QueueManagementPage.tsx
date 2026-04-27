@@ -266,7 +266,7 @@ export default function QueueManagementPage() {
             <ArrowSquareOut size={14} /> RabbitMQ
           </a>
           <button
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             style={{ background: 'var(--color-create)', color: 'var(--on-color-create)' }}
             onClick={() => workerAction('start-all', api.startAllWorkers, 'All workers started')}
             disabled={loading['start-all'] || allWorkersAlive}
@@ -275,7 +275,7 @@ export default function QueueManagementPage() {
             <Play size={14} /> Start All
           </button>
           <button
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
             style={{ background: 'var(--color-cancel)', color: 'var(--on-color-cancel)' }}
             onClick={() => workerAction('stop-all', api.stopAllWorkers, 'All workers stopping')}
             disabled={loading['stop-all']}
@@ -283,7 +283,7 @@ export default function QueueManagementPage() {
             <Square size={14} /> Stop All
           </button>
           <button
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
             style={{ background: 'var(--color-warning)', color: 'var(--on-color-warning)' }}
             onClick={() => workerAction('restart-all', api.restartAllWorkers, 'All workers restarting', 800)}
             disabled={loading['restart-all']}
@@ -291,7 +291,7 @@ export default function QueueManagementPage() {
             <ArrowClockwise size={14} /> Restart All
           </button>
           <button
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
             style={{ background: 'var(--color-1)', color: 'var(--on-color-1)' }}
             onClick={handleFakeJob}
             disabled={loading['fakejob']}

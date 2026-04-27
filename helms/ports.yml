@@ -4,31 +4,37 @@ shared_services:
   - {port: 8000, project: plumo}
   - {port: 3001, project: pulse}
   - {port: 11000, project: plurus}
+  - {port: 12000, project: vigra}
   backend_dev:
   - {port: 10010, project: saas-blueprint-v1}
   - {port: 8010, project: plumo}
   - {port: 3011, project: pulse}
   - {port: 11010, project: plurus}
+  - {port: 12010, project: vigra}
   auth_prod:
   - {port: 10100, project: saas-blueprint-v1}
   - {port: 8001, project: plumo}
   - {port: 4000, project: pulse}
   - {port: 11100, project: plurus}
+  - {port: 12100, project: vigra}
   auth_dev:
   - {port: 10110, project: saas-blueprint-v1}
   - {port: 8011, project: plumo}
   - {port: 4010, project: pulse}
   - {port: 11110, project: plurus}
+  - {port: 12110, project: vigra}
   frontend_prod:
   - {port: 5177, project: saas-blueprint-v1}
   - {port: 5173, project: plumo}
   - {port: 3000, project: pulse}
   - {port: 5179, project: plurus}
+  - {port: 5181, project: vigra}
   frontend_dev:
   - {port: 5178, project: saas-blueprint-v1}
   - {port: 5174, project: plumo}
   - {port: 3010, project: pulse}
   - {port: 5180, project: plurus}
+  - {port: 5182, project: vigra}
   etl_frontend_prod:
   - {port: 3344, project: saas-blueprint-v1}
   - {port: 3333, project: pulse}
@@ -42,39 +48,49 @@ shared_services:
   - {port: 5432, project: plumo}
   - {port: 5437, project: pulse}
   - {port: 5448, project: plurus}
+  - {port: 5452, project: vigra}
   db_prod_replica:
   - {port: 5445, project: saas-blueprint-v1}
   - {port: 5438, project: pulse}
   - {port: 5449, project: plurus}
+  - {port: 5453, project: vigra}
   db_dev:
   - {port: 5446, project: saas-blueprint-v1}
   - {port: 5433, project: plumo}
   - {port: 5439, project: pulse}
   - {port: 5450, project: plurus}
+  - {port: 5454, project: vigra}
   db_replica_dev:
   - {port: 5447, project: saas-blueprint-v1}
   - {port: 5440, project: pulse}
   - {port: 5451, project: plurus}
+  - {port: 5455, project: vigra}
   redis:
   - {port: 6385, project: saas-blueprint-v1}
   - {port: 6379, project: pulse}
   - {port: 6386, project: plurus}
+  - {port: 6388, project: vigra}
   redis_dev:
   - {port: 6383, project: saas-blueprint-v1}
   - {port: 6381, project: pulse}
   - {port: 6387, project: plurus}
+  - {port: 6389, project: vigra}
   qdrant:
   - {port: 6343, project: saas-blueprint-v1}
   - {port: 6333, project: pulse}
+  - {port: 6345, project: vigra}
   qdrant_grpc:
   - {port: 6344, project: saas-blueprint-v1}
   - {port: 6334, project: pulse}
+  - {port: 6346, project: vigra}
   qdrant_dev:
   - {port: 6341, project: saas-blueprint-v1}
   - {port: 6337, project: pulse}
+  - {port: 6347, project: vigra}
   qdrant_grpc_dev:
   - {port: 6342, project: saas-blueprint-v1}
   - {port: 6338, project: pulse}
+  - {port: 6348, project: vigra}
   rabbitmq_amqp:
   - {port: 5675, project: saas-blueprint-v1}
   - {port: 5672, project: pulse}
@@ -184,3 +200,23 @@ projects:
     - {name: redis_dev, port: 6387, proto: tcp}
     - {name: rabbitmq_amqp_dev, port: 5677, proto: tcp}
     - {name: rabbitmq_mgmt_dev, port: 15677, proto: tcp}
+  vigra:
+    label: Vigra — Vigra ERP — Gestão simplificada para MEIs e pequenas empresas
+    root: C:\Workspace\gus-vigra
+    color: Red
+    legacy: false
+    conflicts_with: []
+    prod:
+      svc: {backend: 12000, auth: 12100, frontend: 5181}
+      db: {port: 5452, replica: 5453, name: vigra, user: vigra, pass: vigra}
+    dev:
+      svc: {backend: 12010, auth: 12110, frontend: 5182}
+      db: {port: 5454, replica: 5455, name: vigra_dev, user: vigra, pass: vigra}
+    extra_ports:
+    - {name: redis, port: 6388, proto: tcp}
+    - {name: qdrant, port: 6345, proto: tcp}
+    - {name: qdrant_grpc, port: 6346, proto: tcp}
+    extra_ports_dev:
+    - {name: redis_dev, port: 6389, proto: tcp}
+    - {name: qdrant_dev, port: 6347, proto: tcp}
+    - {name: qdrant_grpc_dev, port: 6348, proto: tcp}

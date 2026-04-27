@@ -47,6 +47,7 @@ CREATE TABLE stock_items (
     product_variation_id INTEGER NOT NULL REFERENCES product_variations(id),
     warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
     quantity NUMERIC(15,3) NOT NULL DEFAULT 0,
+    reserved_quantity NUMERIC(15,3) NOT NULL DEFAULT 0,  -- reservado por pedidos pendentes (boleto, etc.)
     min_quantity NUMERIC(15,3) DEFAULT 0,       -- estoque mínimo (alerta)
     safety_quantity NUMERIC(15,3) DEFAULT 0,    -- estoque de segurança
     avg_cost NUMERIC(15,4) DEFAULT 0,           -- preço médio ponderado
@@ -158,10 +159,67 @@ CREATE TABLE inventory_count_items (
 
 ---
 
-## 7. Regras de Negócio
+## 7. Kits e Combos (BOM — Bill of Materials)
+
+Muitos MEIs vendem produtos em kits (ex: "Kit 3 Camisetas"). A venda de 1 Kit deve dar baixa automaticamente nas SKUs componentes, não no kit em si.
+
+- Kit é um produto do tipo `bundle` no módulo Cadastros
+- Cada kit tem N componentes com suas respectivas quantidades
+- Ao vender 1 kit, o sistema expande os componentes e baixa o estoque de cada SKU individual
+- Inventário físico conta os componentes individualmente; o saldo do kit é derivado (mínimo entre componentes)
+- Custo do kit = Σ(custo_componente × quantidade); calculado automaticamente
+
+```sql
+CREATE TABLE product_bundles (
+    id SERIAL PRIMARY KEY,
+    tenant_id INTEGER NOT NULL REFERENCES tenants(id),
+    bundle_variation_id INTEGER NOT NULL REFERENCES product_variations(id),   -- o kit em si
+    component_variation_id INTEGER NOT NULL REFERENCES product_variations(id), -- SKU componente
+    quantity NUMERIC(15,3) NOT NULL,                                           -- qtd do componente no kit
+    active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    last_updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(bundle_variation_id, component_variation_id)
+);
+```
+
+---
+
+## 8. Embalagens de Envio
+
+Para calcular o frete corretamente, o sistema precisa saber em qual caixa o pedido será embalado. Ao montar um pedido, a IA sugere a menor caixa que comporte todos os itens.
+
+- Tenant cadastra suas caixas disponíveis (dimensões e peso próprio)
+- O sistema calcula o **peso cúbico** (`comprimento × largura × altura / 6000`) e usa o maior entre peso real e cúbico
+- A caixa sugerida é a menor que comporta o volume total dos itens + folga mínima configurável
+- Peso da embalagem somado ao peso dos produtos para cálculo de frete
+
+```sql
+CREATE TABLE packaging_boxes (
+    id SERIAL PRIMARY KEY,
+    tenant_id INTEGER NOT NULL REFERENCES tenants(id),
+    name VARCHAR(100) NOT NULL,             -- 'Caixa P', 'Caixa M', 'Envelope'
+    height_cm NUMERIC(8,2) NOT NULL,
+    width_cm NUMERIC(8,2) NOT NULL,
+    depth_cm NUMERIC(8,2) NOT NULL,
+    own_weight_kg NUMERIC(8,3) NOT NULL DEFAULT 0,
+    max_weight_kg NUMERIC(8,3),             -- limite de peso suportado pela caixa
+    is_default BOOLEAN DEFAULT FALSE,
+    active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    last_updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+---
+
+## 9. Regras de Negócio
 
 - Saldo de estoque nunca vai negativo por padrão; configurável por tenant (permite negativo = sim/não)
+- `reserved_quantity` é incrementado quando pedido entra em `pagamento_pendente` (ex: boleto gerado); decrementado na expedição ou cancelamento — o saldo **disponível real** = `quantity - reserved_quantity`
 - Todo movimento gera um `stock_movement` — auditoria completa
 - Transferência entre depósitos é transacional: ou ambos os lados ocorrem ou nenhum
 - Custo médio é sempre positivo; se entrada com custo zero, usa o custo médio atual
 - FIFO só ativo se `tenant.fifo_enabled = true`; caso contrário usa preço médio
+- Kits do tipo `bundle` não têm saldo direto em `stock_items`; saldo é derivado dos componentes
+- Embalagem sugerida pelo sistema pode ser sobrescrita pelo operador na expedição

@@ -81,7 +81,7 @@ CREATE TABLE client_segment_members (
 Utiliza a **WhatsApp Business API** (via Meta ou provedor parceiro como Twilio / Z-API) para comunicação bidirecional com clientes.
 
 ### Atendimento (Suporte)
-- Inbox centralizado de conversas no Plurus
+- Inbox centralizado de conversas no Vigra
 - Operador responde diretamente pelo painel
 - Histórico de mensagens vinculado ao cadastro do cliente
 - Status da conversa: `aberta`, `em_atendimento`, `resolvida`, `arquivada`
@@ -165,6 +165,80 @@ CREATE TABLE whatsapp_campaigns (
 
 ---
 
+## 4. Funil de Vendas (Pipeline B2B)
+
+Para MEIs e MPEs que vendem serviços ou produtos de alto ticket, é essencial gerenciar *Leads* e *Oportunidades* **antes** de virarem clientes. O funil de vendas resolve esse gap.
+
+- **Lead**: contato inicial (ainda não é cliente). Pode vir de formulário da loja, indicação, WhatsApp, evento
+- **Oportunidade**: lead qualificado com produto/serviço de interesse, valor estimado e previsão de fechamento
+- Estágios do funil customizáveis por tenant (ex: Prospecção → Qualificado → Proposta → Negociação → Fechado)
+- Ao converter uma oportunidade, o lead é transformado em cliente (`clients`) e um pedido pode ser gerado
+- Integrado ao Chat de IA: "Quais oportunidades vencem este mês?"
+
+```sql
+CREATE TABLE leads (
+    id SERIAL PRIMARY KEY,
+    tenant_id INTEGER NOT NULL REFERENCES tenants(id),
+    name VARCHAR(200) NOT NULL,
+    email VARCHAR(200),
+    phone VARCHAR(20),
+    whatsapp VARCHAR(20),
+    company VARCHAR(200),
+    source VARCHAR(50),              -- 'store_form', 'whatsapp', 'referral', 'event', 'manual'
+    assigned_to INTEGER REFERENCES users(id),
+    status VARCHAR(20) NOT NULL DEFAULT 'new',  -- 'new', 'contacted', 'qualified', 'disqualified'
+    notes TEXT,
+    converted_client_id INTEGER REFERENCES clients(id),
+    converted_at TIMESTAMPTZ,
+    active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    last_updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE pipeline_stages (
+    id SERIAL PRIMARY KEY,
+    tenant_id INTEGER NOT NULL REFERENCES tenants(id),
+    name VARCHAR(100) NOT NULL,              -- 'Prospecção', 'Proposta', 'Negociação'
+    order_position INTEGER NOT NULL,
+    probability_pct INTEGER DEFAULT 0,       -- probabilidade estimada de fechamento
+    active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    last_updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE opportunities (
+    id SERIAL PRIMARY KEY,
+    tenant_id INTEGER NOT NULL REFERENCES tenants(id),
+    lead_id INTEGER REFERENCES leads(id),
+    client_id INTEGER REFERENCES clients(id),   -- se já for cliente existente
+    title VARCHAR(200) NOT NULL,
+    stage_id INTEGER NOT NULL REFERENCES pipeline_stages(id),
+    estimated_value NUMERIC(15,2),
+    expected_close_date DATE,
+    assigned_to INTEGER REFERENCES users(id),
+    status VARCHAR(20) NOT NULL DEFAULT 'open',  -- 'open', 'won', 'lost'
+    lost_reason TEXT,
+    converted_order_id INTEGER REFERENCES orders(id),
+    notes TEXT,
+    active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    last_updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE opportunity_activities (
+    id SERIAL PRIMARY KEY,
+    opportunity_id INTEGER NOT NULL REFERENCES opportunities(id),
+    type VARCHAR(30) NOT NULL,               -- 'call', 'email', 'whatsapp', 'meeting', 'note'
+    description TEXT NOT NULL,
+    scheduled_at TIMESTAMPTZ,
+    completed_at TIMESTAMPTZ,
+    created_by INTEGER REFERENCES users(id),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+---
+
 ## 4. Histórico Unificado do Cliente
 
 Visão 360° na ficha do cliente:
@@ -177,11 +251,39 @@ Visão 360° na ficha do cliente:
 
 ---
 
-## 5. Regras de Negócio
+## 5. Log de Consentimento LGPD
+
+O Vigra registra explicitamente cada concessão e revogação de consentimento para comunicação, garantindo conformidade com a LGPD e rastreabilidade total.
+
+- Opt-out via WhatsApp ("SAIR") registra automaticamente o consentimento como `revoked`
+- Opt-in explícito registrado no cadastro do cliente ou no formulário da loja
+- Exportação e exclusão de dados pessoais sob demanda (direitos do titular)
+
+```sql
+CREATE TABLE consent_logs (
+    id SERIAL PRIMARY KEY,
+    tenant_id INTEGER NOT NULL REFERENCES tenants(id),
+    client_id INTEGER REFERENCES clients(id),
+    lead_id INTEGER REFERENCES leads(id),
+    channel VARCHAR(20) NOT NULL,            -- 'whatsapp', 'email', 'sms'
+    action VARCHAR(10) NOT NULL,             -- 'opt_in', 'opt_out'
+    source VARCHAR(50),                      -- 'store_form', 'whatsapp_reply', 'manual', 'import'
+    ip_address INET,
+    user_agent TEXT,
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+---
+
+## 6. Regras de Negócio
 
 - CPF/CNPJ é único por tenant (não pode cadastrar o mesmo documento duas vezes)
-- Opt-out de WhatsApp é respeitado em toda campanha subsequente — obrigatório por lei (LGPD)
+- Opt-out de WhatsApp é respeitado em toda campanha subsequente — obrigatório por lei (LGPD); `consent_logs` é a fonte da verdade
 - Score é recalculado em background diariamente via job agendado
 - Dados de cliente são cobertos pela LGPD: exportação e exclusão sob demanda
 - Exclusão de cliente é soft delete — histórico de pedidos é preservado para fins fiscais
 - Mensagens WhatsApp ficam disponíveis por 90 dias na janela gratuita da Meta; após isso, apenas templates
+- Lead convertido em cliente não perde o histórico de oportunidades e atividades do funil
+- Estágio do funil é customizável por tenant; o Vigra oferece 5 estágios padrão no seed

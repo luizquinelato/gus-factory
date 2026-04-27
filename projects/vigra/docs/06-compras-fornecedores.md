@@ -176,7 +176,61 @@ CREATE TABLE purchase_order_items (
 
 ---
 
-## 6. Regras de Negócio
+## 6. Importação de NF-e do Fornecedor (XML)
+
+A forma mais rápida de dar entrada em compras no Brasil é importando o **XML da NF-e** do fornecedor. Isso elimina a digitação manual e garante precisão nos dados fiscais.
+
+### Fluxo de importação
+1. Usuário faz upload do arquivo XML da NF-e (padrão SEFAZ)
+2. Sistema lê o XML e extrai: CNPJ do emitente, itens (código, descrição, NCM, qtd, preço, IPI, ICMS)
+3. **De-para automático**: tenta associar cada item ao catálogo interno por código de barras ou SKU
+4. Itens sem correspondência ficam pendentes para o usuário fazer o *de-para* manualmente (ou cadastrar)
+5. Fornecedor é criado automaticamente se o CNPJ não existir no cadastro
+6. Após confirmação, gera automaticamente: `purchase_order` + `purchase_order_items` + entrada em estoque + `financial_account` (contas a pagar) com vencimento baseado no prazo configurado do fornecedor
+
+```sql
+CREATE TABLE nfe_imports (
+    id SERIAL PRIMARY KEY,
+    tenant_id INTEGER NOT NULL REFERENCES tenants(id),
+    nfe_key VARCHAR(44) NOT NULL,           -- chave de acesso da NF-e (44 dígitos)
+    nfe_number VARCHAR(20),
+    nfe_series VARCHAR(5),
+    issue_date DATE,
+    supplier_id INTEGER REFERENCES suppliers(id),
+    supplier_cnpj VARCHAR(18) NOT NULL,
+    total_amount NUMERIC(15,2),
+    xml_content TEXT NOT NULL,              -- XML original armazenado para auditoria
+    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+                                            -- 'pending', 'mapped', 'imported', 'cancelled'
+    purchase_order_id INTEGER REFERENCES purchase_orders(id),
+    created_by INTEGER REFERENCES users(id),
+    active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    last_updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(tenant_id, nfe_key)
+);
+
+CREATE TABLE nfe_import_items (
+    id SERIAL PRIMARY KEY,
+    nfe_import_id INTEGER NOT NULL REFERENCES nfe_imports(id),
+    nfe_item_number INTEGER NOT NULL,
+    nfe_product_code VARCHAR(60),           -- código do produto no sistema do fornecedor
+    nfe_product_description TEXT NOT NULL,
+    ncm VARCHAR(10),
+    barcode VARCHAR(50),
+    quantity NUMERIC(15,3) NOT NULL,
+    unit VARCHAR(20),
+    unit_price NUMERIC(15,4) NOT NULL,
+    total_price NUMERIC(15,2) NOT NULL,
+    mapped_variation_id INTEGER REFERENCES product_variations(id),  -- null = ainda não mapeado
+    active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+---
+
+## 7. Regras de Negócio
 
 - CNPJ/CPF de fornecedor é único por tenant
 - PO não pode ser editada após status `enviado_fornecedor` sem cancelar e recriar
@@ -184,3 +238,6 @@ CREATE TABLE purchase_order_items (
 - Conta a pagar gerada tem vencimento = `data_recebimento + payment_terms_days`
 - Avaliação do fornecedor é opcional mas incentivada; influencia o ranking nas cotações
 - Soft delete em tudo — histórico de compras preservado mesmo se fornecedor for desativado
+- Chave NF-e (`nfe_key`) é única por tenant — evita importação duplicada da mesma nota
+- XML da NF-e é armazenado integralmente em `nfe_imports.xml_content` para fins de auditoria fiscal
+- De-para de itens: sistema sugere correspondência por `barcode` ou `ncm`; usuário confirma antes da importação final

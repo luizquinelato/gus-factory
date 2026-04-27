@@ -14,6 +14,7 @@ import Menu21Page from './pages/Menu21Page'
 import Menu22Page from './pages/Menu22Page'
 import RolesPage from './pages/RolesPage'
 import PagesPage from './pages/PagesPage'
+import OutboxPage from './pages/OutboxPage'
 import apiClient from './services/apiClient'
 import type { ThemeMode, ColorSchemaMode, ColorScheme, User } from './types'
 
@@ -150,6 +151,7 @@ function AuthenticatedApp() {
           <Route path="/color-settings" element={<AdminRoute><ColorSettingsPage /></AdminRoute>} />
           <Route path="/admin/roles"    element={<AdminRoute><RolesPage /></AdminRoute>} />
           <Route path="/admin/pages"   element={<AdminRoute><PagesPage /></AdminRoute>} />
+          <Route path="/admin/outbox"  element={<AdminRoute><OutboxPage /></AdminRoute>} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/menu-1" element={<Menu1Page />} />
           <Route path="/menu-2/sub-1" element={<Menu21Page />} />

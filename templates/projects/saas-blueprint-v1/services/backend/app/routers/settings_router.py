@@ -21,11 +21,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db_session
 from app.dependencies.auth import require_admin
-from app.etl.worker_manager import WorkerManager
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/settings", tags=["ETL — Settings"])
+router = APIRouter(prefix="/settings", tags=["settings"])
 
 
 class SettingUpdate(BaseModel):
@@ -167,14 +166,14 @@ async def update_setting(
     await db.commit()
     logger.info("Setting '%s' updated for tenant %d", key, user["tenant_id"])
 
-    # If a worker-count setting changed, scale the live pool immediately.
+    # If a worker-count setting changed, scale the live pool immediately (ETL only).
     if key in _WORKER_SETTING_MAP:
-        worker_type = _WORKER_SETTING_MAP[key]
         try:
+            from app.etl.worker_manager import WorkerManager
             count = int(float(value_str))
-            WorkerManager.get_instance().set_count(worker_type, count)
-            logger.info("WorkerManager: scaled %s pool to %d", worker_type, count)
-        except (ValueError, TypeError) as exc:
-            logger.warning("Could not scale %s pool: %s", worker_type, exc)
+            WorkerManager.get_instance().set_count(_WORKER_SETTING_MAP[key], count)
+            logger.info("WorkerManager: scaled %s pool to %d", _WORKER_SETTING_MAP[key], count)
+        except (ImportError, ValueError, TypeError) as exc:
+            logger.warning("Could not scale worker pool: %s", exc)
 
     return {"key": key, "value": body.value, "message": "Setting updated"}

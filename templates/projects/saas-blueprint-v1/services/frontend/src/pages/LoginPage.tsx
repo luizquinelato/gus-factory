@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import React, { useState, useRef, useEffect } from 'react'
+import { useNavigate, useLocation, Navigate } from 'react-router-dom'
 import { Eye, EyeSlash } from '@phosphor-icons/react'
 import QuantumBackground from '../components/QuantumBackground'
 import { useAuth } from '../contexts/AuthContext'
@@ -16,19 +16,34 @@ const riseKeyframes = `
 export default function LoginPage() {
   const navigate  = useNavigate()
   const location  = useLocation()
-  const { login } = useAuth()
+  const { login, isAuthenticated } = useAuth()
 
   // ?etl=1 → usuário veio do ETL; o path desejado está no sessionStorage do ETL
   const isEtlRedirect = new URLSearchParams(location.search).get('etl') === '1'
 
-  const [email,    setEmail]    = useState('')
-  const [password, setPassword] = useState('')
-  const [showPass, setShowPass] = useState(false)
-  const [loading,  setLoading]  = useState(false)
-  const [error,    setError]    = useState('')
+  const [email,      setEmail]      = useState('')
+  const [password,   setPassword]   = useState('')
+  const [showPass,   setShowPass]   = useState(false)
+  const [loading,    setLoading]    = useState(false)
+  const [ottLoading, setOttLoading] = useState(false)
+  const [error,      setError]      = useState('')
 
   const emailRef = useRef<HTMLInputElement>(null)
   const passRef  = useRef<HTMLInputElement>(null)
+
+  // Já autenticado + veio do ETL → pula o formulário e gera OTT direto.
+  // Cobre o caso de "abrir em nova aba": ETL redireciona para /login?etl=1,
+  // mas o usuário já tem sessão ativa no frontend principal.
+  useEffect(() => {
+    if (!isAuthenticated || !isEtlRedirect) return
+    setOttLoading(true)
+    apiClient.post<{ ott: string; etl_url: string }>('/auth/ott')
+      .then(({ data }) => { window.location.href = `${data.etl_url}?ott=${data.ott}` })
+      .catch(() => setOttLoading(false)) // falha no OTT → mostra formulário como fallback
+  }, [isAuthenticated, isEtlRedirect])
+
+  // Já autenticado sem redirect do ETL → manda para home
+  if (isAuthenticated && !isEtlRedirect) return <Navigate to="/" replace />
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -73,6 +88,14 @@ export default function LoginPage() {
     outline: 'none',
     transition: 'border-color .2s',
   }
+
+  // Gerando OTT para redirecionar ao ETL sem mostrar o formulário
+  if (ottLoading) return (
+    <div style={{ position: 'relative', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <QuantumBackground />
+      <p style={{ position: 'relative', zIndex: 10, color: '#94a3b8', fontSize: '1rem' }}>Redirecionando ao ETL…</p>
+    </div>
+  )
 
   return (
     <div style={{ position: 'relative', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>

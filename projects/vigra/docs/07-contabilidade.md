@@ -1,7 +1,7 @@
 <!-- blueprint: db_changes=true seed_data=false -->
 # Módulo 07 — Contabilidade
 
-Escrituração contábil integrada ao fluxo operacional do Plurus. Voltada para MEI e MPE que precisam entregar relatórios ao contador ou acompanhar a saúde contábil do negócio. Não inclui emissão de Nota Fiscal nesta versão.
+Escrituração contábil integrada ao fluxo operacional do Vigra. Voltada para MEI e MPE que precisam entregar relatórios ao contador ou acompanhar a saúde contábil do negócio. Não inclui emissão de Nota Fiscal nesta versão.
 
 ---
 

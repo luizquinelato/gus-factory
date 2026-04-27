@@ -27,6 +27,7 @@ CREATE TABLE orders (
     tenant_id INTEGER NOT NULL REFERENCES tenants(id),
     order_number VARCHAR(30) NOT NULL UNIQUE,  -- gerado: ORD-2026-000001
     client_id INTEGER REFERENCES clients(id),
+    salesperson_id INTEGER REFERENCES users(id),   -- vendedor responsável (para comissão)
     channel VARCHAR(30) NOT NULL DEFAULT 'manual',  -- 'manual','store','mercadolivre','amazon'
     status VARCHAR(30) NOT NULL DEFAULT 'draft',
     subtotal NUMERIC(15,2) NOT NULL DEFAULT 0,
@@ -72,10 +73,10 @@ CREATE TABLE order_status_history (
 
 ## 2. E-Commerce Próprio (Loja Virtual)
 
-O tenant pode criar e publicar sua própria loja virtual sem código, dentro do Plurus.
+O tenant pode criar e publicar sua própria loja virtual sem código, dentro do Vigra.
 
 ### Configurações da loja
-- Nome, logo, domínio customizado (CNAME ou subdomínio `{slug}.plurus.shop`)
+- Nome, logo, domínio customizado (CNAME ou subdomínio `{slug}.vigra.shop`)
 - Tema de cores (integrado ao sistema de Color Schema do tenant)
 - Banners, categorias em destaque, produtos em destaque
 - Página de produto com fotos, descrição, variações, estoque em tempo real
@@ -93,6 +94,8 @@ CREATE TABLE stores (
     logo_url TEXT,
     banner_url TEXT,
     primary_color VARCHAR(7),
+    meta_title VARCHAR(200),                -- SEO: título da loja nas buscas
+    meta_description VARCHAR(500),          -- SEO: descrição da loja nas buscas
     active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     last_updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -115,9 +118,9 @@ CREATE TABLE store_products (
 ## 3. Integração com Marketplaces
 
 ### Mercado Livre
-- OAuth2: tenant autoriza a conta ML dentro do Plurus
+- OAuth2: tenant autoriza a conta ML dentro do Vigra
 - Sync de produtos: publica/atualiza anúncios automaticamente a partir do catálogo
-- Sync de pedidos: pedidos do ML entram no Plurus como `channel = 'mercadolivre'`
+- Sync de pedidos: pedidos do ML entram no Vigra como `channel = 'mercadolivre'`
 - Sync de estoque: saída por ML atualiza o saldo em tempo real
 - Preço por canal: produto pode ter preço diferente no ML vs loja própria
 
@@ -170,7 +173,78 @@ CREATE TABLE marketplace_listings (
 
 ---
 
-## 5. Devoluções (RMA)
+## 5. Carrinhos Abandonados
+
+Rastreamento de sessões de compra na loja própria que não foram finalizadas. Alimenta o módulo de CRM/IA para campanhas de recuperação automáticas via WhatsApp.
+
+- Carrinho criado ao primeiro item adicionado; atualizado a cada mudança
+- Carrinho abandonado: cliente saiu sem finalizar o pedido (sem checkout concluído)
+- Job a cada hora marca carrinhos inativos há mais de 30 min como `abandoned`
+- Agente de IA ou campanha manual dispara mensagem de recuperação (configurável: 1h, 6h, 24h após abandono)
+- Ao finalizar o pedido, o carrinho é marcado como `converted` e vinculado ao pedido
+
+```sql
+CREATE TABLE abandoned_carts (
+    id SERIAL PRIMARY KEY,
+    tenant_id INTEGER NOT NULL REFERENCES tenants(id),
+    client_id INTEGER REFERENCES clients(id),
+    session_token VARCHAR(100),                -- para visitantes não identificados
+    items JSONB NOT NULL,                      -- [{variation_id, quantity, unit_price}]
+    subtotal NUMERIC(15,2) NOT NULL DEFAULT 0,
+    status VARCHAR(20) NOT NULL DEFAULT 'active',  -- 'active', 'abandoned', 'converted', 'expired'
+    recovery_sent_at TIMESTAMPTZ,              -- timestamp do último disparo de recuperação
+    recovery_attempts INTEGER DEFAULT 0,
+    converted_order_id INTEGER REFERENCES orders(id),
+    last_activity_at TIMESTAMPTZ DEFAULT NOW(),
+    active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    last_updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+---
+
+## 6. Comissões de Vendedores
+
+Para tenants que trabalham com representantes ou vendedores externos, o sistema calcula comissões automaticamente com base nos pedidos finalizados.
+
+- Regras de comissão configuradas por produto, categoria ou global
+- Comissão calculada sobre o valor líquido do pedido (após descontos, antes de impostos)
+- Gerada automaticamente quando o pedido entra em status `entregue`
+- Consolidação mensal: relatório de comissões a pagar por vendedor
+
+```sql
+CREATE TABLE commission_rules (
+    id SERIAL PRIMARY KEY,
+    tenant_id INTEGER NOT NULL REFERENCES tenants(id),
+    name VARCHAR(100) NOT NULL,
+    salesperson_id INTEGER REFERENCES users(id),   -- null = regra global para todos
+    applies_to VARCHAR(20) DEFAULT 'all',           -- 'all', 'product', 'category'
+    target_ids INTEGER[],
+    commission_pct NUMERIC(5,2) NOT NULL,
+    active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    last_updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE order_commissions (
+    id SERIAL PRIMARY KEY,
+    tenant_id INTEGER NOT NULL REFERENCES tenants(id),
+    order_id INTEGER NOT NULL REFERENCES orders(id),
+    salesperson_id INTEGER NOT NULL REFERENCES users(id),
+    base_amount NUMERIC(15,2) NOT NULL,            -- valor base para cálculo
+    commission_pct NUMERIC(5,2) NOT NULL,
+    commission_amount NUMERIC(15,2) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending', -- 'pending', 'approved', 'paid'
+    paid_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    last_updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+---
+
+## 7. Devoluções (RMA)
 
 - Solicitação de devolução por cliente ou iniciada pelo operador
 - Motivo obrigatório: defeito, arrependimento, erro de envio, produto errado
@@ -180,11 +254,14 @@ CREATE TABLE marketplace_listings (
 
 ---
 
-## 6. Regras de Negócio
+## 8. Regras de Negócio
 
 - Número do pedido gerado sequencialmente por tenant: `ORD-{ANO}-{SEQUENCIAL}`
 - Baixa de estoque ocorre na transição `em_separacao`; não no momento do pagamento
+- Reserva de estoque (`reserved_quantity`) ocorre ao entrar em `pagamento_pendente`; liberada no cancelamento
 - Cancelamento após expedição gera RMA automático
 - Preço no `order_item` é fixado no momento da venda (não muda se catálogo mudar)
 - CMV calculado com base em `cost_at_sale` (custo médio no momento da saída do estoque)
 - Pedidos de marketplace são importados via fila assíncrona (evita timeout na API)
+- Carrinho abandonado: session_token identifica visitantes anônimos; ao logar, carrinho é vinculado ao cliente
+- Comissão só é gerada para pedidos com `salesperson_id` preenchido e status `entregue`

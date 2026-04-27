@@ -35,6 +35,10 @@ CREATE TABLE shipping_rates (
     service_name VARCHAR(100),          -- 'PAC', 'SEDEX', 'Econômico'
     origin_state VARCHAR(2),
     destination_state VARCHAR(2),
+    origin_zip_start VARCHAR(9),        -- faixa de CEP de origem (ex: '01000-000')
+    origin_zip_end VARCHAR(9),
+    destination_zip_start VARCHAR(9),   -- faixa de CEP de destino (ex: '01000-000')
+    destination_zip_end VARCHAR(9),     -- permite regras como "SP Capital = R$10 fixo"
     min_weight_kg NUMERIC(8,3) DEFAULT 0,
     max_weight_kg NUMERIC(8,3),
     price NUMERIC(10,2) NOT NULL,
@@ -52,9 +56,11 @@ CREATE TABLE shipping_rates (
 - Calculado no checkout da loja própria e nos pedidos manuais
 - Integração com API dos Correios (e-PAC, Sedex) via credenciais do tenant
 - Integração com Jadlog, Loggi (APIs REST)
-- Fallback: tabela manual de fretes por estado quando API indisponível
+- Fallback: tabela manual de fretes por faixa de CEP ou estado quando API indisponível
 - Frete grátis: por valor mínimo de pedido ou por promoção (módulo Cadastros)
 - Retorna múltiplas opções com preço e prazo para o cliente escolher
+- **Peso cúbico**: calculado como `(altura × largura × profundidade) / 6000`; o frete usa o maior entre peso real e cúbico
+- **Embalagem sugerida**: o sistema seleciona automaticamente a menor `packaging_box` (módulo Estoque) que comporte os itens do pedido para o cálculo correto do peso cúbico
 
 ---
 
@@ -168,3 +174,5 @@ CREATE TABLE return_requests (
 - Produto devolvido só retorna ao estoque após `inspection_result = 'restock'`
 - Custo do frete de devolução: configurável por tenant (absorve o custo ou cobra do cliente)
 - Entregas para retirada na loja: status vai direto de `em_separacao` para `entregue` ao confirmar retirada
+- Faixa de CEP tem prioridade sobre faixa de estado na busca de tarifa manual; o sistema usa a regra mais específica disponível
+- Peso cúbico é sempre calculado usando a `packaging_box` selecionada; se nenhuma cadastrada, usa dimensões brutas dos itens

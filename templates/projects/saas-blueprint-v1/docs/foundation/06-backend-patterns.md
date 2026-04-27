@@ -98,73 +98,110 @@ def get_settings() -> Settings:
 ## 🚀 2. Padrão do main.py
 
 O arquivo principal deve incluir:
-1. `lifespan` para inicialização/teardown (banco, cache).
+1. `lifespan` para inicialização/teardown — banco, OutboxProcessor, ETL workers.
 2. Global Exception Handler para formatar erros 500.
 3. CORS restritivo baseado no `get_settings()`.
 4. Middleware de logging para registrar tempo de resposta.
+5. `ModuleRegistry.include_all()` para carregar os routers dos módulos de negócio.
 
 ```python
 # app/main.py
-from fastapi import FastAPI, Request, status
-from fastapi.responses import JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
+import logging, time, json, os
 from contextlib import asynccontextmanager
-import time
-import logging
+from fastapi import FastAPI, Request, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.core.config import get_settings
-from app.core.database import get_database
+from app.core.database import ping_database
+from app.core.logging_config import setup_logging
+from app.core.outbox_processor import outbox_processor   # background task — entrega eventos confiáveis
+from app.modules import ModuleRegistry
 from app.routers import api_router
 
+# ── Módulos de negócio ────────────────────────────────────────────────────────
+# Cada import registra o módulo no ModuleRegistry e seus handlers no EventBus.
+# Para adicionar: `import app.modules.meu_modulo  # noqa`
+import app.modules.demo  # noqa — remova em produção
+
 settings = get_settings()
+setup_logging()
 logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
-    logger.info("🚀 Iniciando serviços...")
-    db = get_database()
-    db.connect()
-    yield
-    # Shutdown
-    logger.info("🛑 Encerrando serviços...")
-    db.disconnect()
+    logger.info("🚀 Backend iniciando (env=%s)...", settings.ENVIRONMENT)
 
-app = FastAPI(
-    title=settings.PROJECT_NAME,
-    version=settings.VERSION,
-    lifespan=lifespan
-)
+    if await ping_database():
+        logger.info("✅ Database conectado.")
+    else:
+        logger.error("❌ Database NÃO conectado.")
+
+    # Outbox Processor — entrega eventos do emit_reliable() após commit
+    outbox_processor.start()
+
+    # ETL Workers — omita se a feature `etl` estiver desligada
+    try:
+        from app.etl.queue_manager import QueueManager
+        from app.etl.worker_manager import WorkerManager
+        QueueManager.get_instance().declare_all_queues()
+        WorkerManager.get_instance().start_all()
+        logger.info("✅ ETL workers iniciados.")
+    except Exception as exc:
+        logger.warning("⚠️  ETL indisponível: %s", exc)
+
+    yield
+
+    outbox_processor.stop()
+    try:
+        from app.etl.worker_manager import WorkerManager
+        WorkerManager.get_instance().stop()
+    except Exception:
+        pass
+    logger.info("🛑 Backend encerrando.")
+
+app = FastAPI(title=settings.PROJECT_NAME, version=settings.VERSION, lifespan=lifespan)
+
+# Rate limiting — veja seção 11
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from app.core.limiter import limiter
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.BACKEND_CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Internal-Key"],
 )
 
-# Logging Middleware
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
-    start_time = time.time()
+    start = time.time()
     response = await call_next(request)
-    process_time = (time.time() - start_time) * 1000
-    logger.info(f"{request.method} {request.url.path} - {response.status_code} - {process_time:.2f}ms")
+    logger.info("%s %s — %s — %.2fms",
+                request.method, request.url.path, response.status_code,
+                (time.time() - start) * 1000)
     return response
 
-# Global Exception Handler
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    logger.error(f"Erro não tratado: {exc}", exc_info=True)
-    return JSONResponse(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={"detail": "Erro interno do servidor. Tente novamente mais tarde."}
-    )
+    logger.error("Erro não tratado: %s", exc, exc_info=True)
+    return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        content={"detail": "Erro interno do servidor."})
 
-# Routers
+# Módulos de negócio + routers do core
+ModuleRegistry.include_all(api_router)
 app.include_router(api_router, prefix=settings.API_V1_STR)
+
+# Arquivos estáticos (avatars, uploads)
+_uploads = os.path.join(os.path.dirname(__file__), "..", "uploads")
+os.makedirs(os.path.join(_uploads, "avatars"), exist_ok=True)
+app.mount("/static", StaticFiles(directory=_uploads), name="static")
 ```
 
 ## 🛣️ 3. Padrão de Router e Endpoints
@@ -621,3 +658,100 @@ async def refresh(request: Request, body: RefreshRequest, ...):
 
 > **Regra:** Endpoints `/auth/login` e `/auth/refresh` **sempre** têm rate limit.
 > Para outros endpoints sensíveis (ex: reset de senha, upload), avalie caso a caso.
+
+## 📡 12. Event Bus — Comunicação entre Módulos
+
+O backend segue a arquitetura **Modular Monolith** (ver `06-backend-patterns.md` + doc de arquitetura do projeto). A comunicação entre módulos usa o `EventBus` — nunca imports diretos entre módulos de negócio.
+
+### Dois modos de emissão
+
+| Modo | Método | Garantia | Quando usar |
+|---|---|---|---|
+| **Best-effort** | `EventBus.emit()` | In-process, sem retry | Cache, notificações, UI |
+| **Confiável** | `EventBus.emit_reliable()` | Transacional via Outbox | Finanças, estoque, contabilidade |
+
+```python
+# core/event_bus.py — uso nos módulos
+
+# Best-effort (informativo — falha não é crítica)
+await EventBus.emit("product.updated", {"id": product_id, "tenant_id": tenant_id})
+
+# Confiável — OBRIGATÓRIO para dados financeiros/estoque
+# tenant_id é obrigatório — isola eventos por tenant
+await EventBus.emit_reliable(
+    "order.confirmed",
+    {"order_id": order_id, "total": total},
+    db,
+    tenant_id=current_user["tenant_id"],
+)
+await db.commit()   # o commit persiste o evento junto com o dado de negócio
+```
+
+### Regra: emit vs emit_reliable
+
+```
+├── Cruza fronteira financeira?        → emit_reliable ⚠️
+│     order.confirmed, payment.confirmed, purchase.received
+├── Modifica estoque efetivamente?     → emit_reliable ⚠️
+│     order.paid, order.cancelled, order.delivered
+└── Informativo / cache / alerta?      → emit
+      product.updated, client.created, stock.low
+```
+
+### Registrar handlers
+
+```python
+# modules/estoque/events.py
+from app.core.event_bus import EventBus
+
+async def on_order_confirmed(payload: dict) -> None:
+    """Reserva estoque quando pedido é confirmado."""
+    # lógica de reserva...
+
+# modules/estoque/__init__.py
+from app.modules.estoque.events import on_order_confirmed
+from app.core.event_bus import EventBus
+
+EventBus.subscribe("order.confirmed", on_order_confirmed)
+```
+
+### OutboxProcessor
+
+Background task iniciado no `lifespan` do `main.py`. A cada 2s:
+1. `SELECT FOR UPDATE SKIP LOCKED` — seguro para múltiplas instâncias
+2. Injeta `__event_id__` e `__tenant_id__` no payload
+3. Entrega via `EventBus.emit()` (handlers in-process)
+4. Marca `processed_at` ou incrementa `attempts` / seta `failed_at` (dead-letter)
+
+**Monitoramento:** `Configurações → Outbox` (admin-only) — acessível no frontend principal.
+
+### Metadados injetados pelo OutboxProcessor
+
+Todo handler de `emit_reliable` recebe no `payload` duas chaves injetadas pelo sistema:
+
+| Chave | Tipo | Uso |
+|---|---|---|
+| `__event_id__` | `int` | Chave de idempotência — use em `ON CONFLICT (outbox_event_id) DO NOTHING` |
+| `__tenant_id__` | `int` | Fonte de verdade de tenant — use SEMPRE para filtrar queries, nunca `payload["tenant_id"]` |
+
+```python
+# handler idempotente e com isolamento correto de tenant
+async def on_order_confirmed(payload: dict) -> None:
+    event_id  = payload["__event_id__"]   # chave de idempotência
+    tenant_id = payload["__tenant_id__"]  # isolamento — fonte de verdade
+    order_id  = payload["order_id"]
+
+    async with AsyncSessionLocal() as db:
+        await db.execute(
+            text("""
+                INSERT INTO stock_reservations
+                    (outbox_event_id, order_id, tenant_id, reserved_at)
+                VALUES (:eid, :oid, :tid, NOW())
+                ON CONFLICT (outbox_event_id) DO NOTHING
+            """),
+            {"eid": event_id, "oid": order_id, "tid": tenant_id},
+        )
+        await db.commit()
+```
+
+> **Tabelas afetadas por `emit_reliable`** devem ter `outbox_event_id BIGINT UNIQUE` para garantir idempotência — o OutboxProcessor entrega *at-least-once*.

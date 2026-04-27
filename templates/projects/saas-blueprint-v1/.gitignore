@@ -50,6 +50,8 @@ docker-compose.override.yml
 postgres_data/
 redis_data/
 qdrant_data/
+backups/*.sql
+backups/*.backup
 *.sql.bak
 *.dump
 

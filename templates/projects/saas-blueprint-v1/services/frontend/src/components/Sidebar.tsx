@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { NavLink, useNavigate, useLocation } from 'react-router-dom'
-import { House, Palette, User, SignOut, Gear, CaretRight, CaretLeft, Sun, Moon, Article, FolderOpen, ShieldCheck, SquaresFour, ArrowSquareOut } from '@phosphor-icons/react'
+import { House, Palette, User, SignOut, Gear, CaretRight, CaretLeft, Sun, Moon, Article, FolderOpen, ShieldCheck, SquaresFour, ArrowSquareOut, Tray } from '@phosphor-icons/react'
 import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/useTheme'
 import apiClient from '../services/apiClient'
@@ -273,7 +273,7 @@ export default function Sidebar() {
   const location = useLocation()
 
   // Pai ativo: qualquer rota filha do grupo Settings acende o botão pai
-  const SETTINGS_ROUTES = ['/color-settings', '/admin/roles', '/admin/pages']
+  const SETTINGS_ROUTES = ['/color-settings', '/admin/roles', '/admin/pages', '/admin/outbox']
   const isSettingsActive = SETTINGS_ROUTES.some(r => location.pathname.startsWith(r))
 
   const mode: Mode = themeMode === 'dark' ? 'dark' : 'light'
@@ -547,6 +547,7 @@ export default function Sidebar() {
                 <FlyoutItem icon={Palette}       label="Cores"    isDark={isDark} onClick={() => { setSettingsOpen(false); navigate('/color-settings') }} />
                 <FlyoutItem icon={SquaresFour}   label="Páginas"  isDark={isDark} onClick={() => { setSettingsOpen(false); navigate('/admin/pages') }} />
                 <FlyoutItem icon={ShieldCheck}   label="Papéis"   isDark={isDark} onClick={() => { setSettingsOpen(false); navigate('/admin/roles') }} />
+                <FlyoutItem icon={Tray}          label="Outbox"   isDark={isDark} onClick={() => { setSettingsOpen(false); navigate('/admin/outbox') }} />
               </div>
             </Flyout>
           </>

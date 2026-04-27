@@ -33,10 +33,12 @@ def apply(conn):
         logger.info("  system_settings.setting_type column added (if not existed)")
 
         # 2. etl_job_errors
+        # Ordem: [id] → [campos próprios] → [tenant_id] → [active] → [created_at]
         cur.execute("""
             CREATE TABLE IF NOT EXISTS etl_job_errors (
-                id           SERIAL PRIMARY KEY,
-                tenant_id    INTEGER      NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+                -- 1. ID
+                id           SERIAL       PRIMARY KEY,
+                -- 2. Campos próprios
                 job_id       INTEGER,
                 worker_type  VARCHAR(50)  NOT NULL,
                 error_code   VARCHAR(100) NOT NULL,
@@ -46,6 +48,8 @@ def apply(conn):
                 item_index   INTEGER      DEFAULT 0,
                 ai_enabled   BOOLEAN      DEFAULT FALSE,
                 is_transient BOOLEAN      DEFAULT FALSE,
+                -- 3. Campos herdados
+                tenant_id    INTEGER      NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
                 active       BOOLEAN      DEFAULT TRUE,
                 created_at   TIMESTAMPTZ  DEFAULT NOW()
             );

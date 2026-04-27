@@ -3,7 +3,14 @@
 
 > ✅ **Schema base pré-gerado** em `services/backend/scripts/migrations/0001_initial_schema.py`.
 > **Não recriar as tabelas base.** Use este doc como referência de padrões e convenções.
-> Tabelas de negócio do projeto são criadas em migrations customizadas a partir de `0003_`.
+>
+> **Migrations reservadas pelo framework:**
+> - `0001_initial_schema` — tabelas base (tenants, users, roles, pages, etc.)
+> - `0002_initial_seed_data` — dados iniciais (tenant padrão, admin, cores, settings)
+> - `0003_etl_schema` — tabelas ETL (`etl_job_errors`) + settings da fila (criado se feature `etl` estiver ativa)
+> - `0004_event_bus_schema` — `events_outbox` (Transactional Outbox Pattern — sempre presente)
+>
+> **Tabelas de negócio do projeto começam em `0005_`.**
 
 Este documento define a arquitetura multi-tenant, o padrão de soft delete e as tabelas base obrigatórias do sistema.
 
@@ -299,6 +306,49 @@ CREATE TABLE migration_history (
     rollback_at TIMESTAMP WITH TIME ZONE
 );
 ```
+
+### 11. events_outbox
+Tabela do **Transactional Outbox Pattern** (criada em `0004_event_bus_schema`). Permite que módulos gravem eventos confiáveis dentro da mesma transação de negócio. O `OutboxProcessor` (background task do FastAPI) lê e entrega os eventos após o commit.
+
+> **Não possui `active` nem `last_updated_at`** — é append-only. Os timestamps `processed_at` e `failed_at` substituem o ciclo de vida.
+
+```sql
+CREATE TABLE events_outbox (
+    -- 1. ID
+    id           BIGSERIAL    PRIMARY KEY,
+    -- 2. Campos próprios
+    event_name   VARCHAR(100) NOT NULL,
+    payload      JSONB        NOT NULL DEFAULT '{}',
+    attempts     SMALLINT     NOT NULL DEFAULT 0,
+    max_attempts SMALLINT     NOT NULL DEFAULT 3,
+    last_error   TEXT,
+    processed_at TIMESTAMPTZ,          -- NULL = pendente ou dead-letter
+    failed_at    TIMESTAMPTZ,          -- NOT NULL = esgotou tentativas (dead-letter)
+    -- 3. Campos herdados
+    tenant_id    INTEGER      NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_events_outbox_tenant  ON events_outbox (tenant_id);
+-- Índice parcial: cobre apenas pendentes — eficiente com milhões de eventos históricos
+CREATE INDEX idx_events_outbox_pending ON events_outbox (tenant_id, created_at)
+    WHERE processed_at IS NULL AND failed_at IS NULL;
+```
+
+**Como usar nos módulos de negócio:**
+```python
+# Dentro de uma transação — commit é responsabilidade do chamador
+await EventBus.emit_reliable("order.confirmed", payload, db, tenant_id=tenant_id)
+await db.commit()
+```
+
+**Estados possíveis de um evento:**
+| `processed_at` | `failed_at` | Estado |
+|---|---|---|
+| `NULL` | `NULL` | 🟡 Pendente |
+| `NOT NULL` | `NULL` | 🟢 Processado |
+| `NULL` | `NOT NULL` | 🔴 Dead-letter (esgotou `max_attempts`) |
+
+**Monitoramento:** `Configurações → Outbox` (admin-only) — stats, eventos recentes, retry/descarte de dead-letters.
 
 ## 💾 Backup e Restore
 

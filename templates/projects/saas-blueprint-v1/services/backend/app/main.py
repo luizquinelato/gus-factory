@@ -15,7 +15,14 @@ from app.core.config import get_settings
 from app.core.database import ping_database
 from app.core.limiter import limiter
 from app.core.logging_config import setup_logging
+from app.core.outbox_processor import outbox_processor
+from app.modules import ModuleRegistry
 from app.routers import api_router
+
+# ── Módulos de negócio ────────────────────────────────────────────────────────
+# Cada import abaixo registra o módulo no ModuleRegistry e seus handlers no EventBus.
+# Para adicionar um novo módulo: `import app.modules.meu_modulo  # noqa`
+import app.modules.demo  # noqa — módulo de demonstração; remova em produção
 
 settings = get_settings()
 
@@ -33,6 +40,9 @@ async def lifespan(app: FastAPI):
     else:
         logger.error("❌ Database NÃO conectado.")
 
+    # Outbox Processor — entrega eventos confiáveis gravados via emit_reliable()
+    outbox_processor.start()
+
     # ETL Workers — declara filas e inicia pools
     try:
         from app.etl.queue_manager import QueueManager
@@ -49,6 +59,8 @@ async def lifespan(app: FastAPI):
     yield
 
     # Shutdown — para todos os workers graciosamente
+    outbox_processor.stop()
+
     try:
         from app.etl.worker_manager import WorkerManager
         WorkerManager.get_instance().stop()
@@ -103,6 +115,9 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={"detail": "Erro interno do servidor."},
     )
 
+
+# Inclui routers dos módulos de negócio registrados no ModuleRegistry
+ModuleRegistry.include_all(api_router)
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
 

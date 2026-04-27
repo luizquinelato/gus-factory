@@ -77,6 +77,7 @@ _PortsDumper.add_representer(
 ROOT                   = Path(__file__).parent.parent
 PORTS_FILE             = ROOT / "helms" / "ports.yml"
 TEMPLATES_PROJECTS_DIR = ROOT / "templates" / "projects"
+PROJECTS_DIR           = ROOT / "projects"
 
 # Paleta de cores PS — ordem de prioridade ao auto-atribuir (Cyan/Magenta/Yellow reservadas)
 PS_COLORS = ["Green", "Blue", "Red", "DarkCyan", "DarkGreen", "Gray", "White"]
@@ -583,7 +584,7 @@ def collect_project_info(data: dict, manifest: dict) -> dict:
 
     # ── 1. Projeto ────────────────────────────────────────────────
     print(f"\n{YELLOW}── 1. Projeto ──────────────────────────────────────────────{RESET}")
-    key = prompt("Chave (snake_case, ex: meu_erp)").lower().replace("-", "_").replace(" ", "_")
+    key = prompt("Chave (ex: meu-erp ou meu_erp)").lower().replace(" ", "-")
     if not key:
         print(f"{RED}✗ Chave inválida.{RESET}"); sys.exit(1)
     if key in template_keys:
@@ -605,13 +606,13 @@ def collect_project_info(data: dict, manifest: dict) -> dict:
     if is_update:
         print(f"\n  {YELLOW}⚠️  Projeto '{key}' já existe{RESET} — modo atualização {DIM}(valores atuais como default){RESET}.")
         ex_name, _, ex_desc = existing.get("label", f"{key} — ").partition(" — ")
-        name_def  = ex_name.strip() or key.replace("_", " ").title()
+        name_def  = ex_name.strip() or " ".join(w.capitalize() for w in re.split(r"[-_]+", key) if w)
         desc_def  = ex_desc.strip() or f"{name_def} — descrição"
         root_def  = existing.get("root", f"C:\\Workspace\\gus-{key}")
         color_def = existing.get("color", auto_pick_color(data))
         alias_def = existing.get("alias", key.replace("_", "-"))
     else:
-        name_def  = key.replace("_", " ").title()
+        name_def  = " ".join(w.capitalize() for w in re.split(r"[-_]+", key) if w)
         desc_def  = f"{name_def} — descrição"
         root_def  = f"C:\\Workspace\\gus-{key}"
         color_def = auto_pick_color(data)
@@ -974,11 +975,25 @@ def main() -> None:
     update_ports_yml(data, info)
 
     key    = info["key"]
+    alias  = info.get("alias", key)
     action = "atualizado" if info["is_update"] else "criado"
+
+    # 7. Cria pasta de documentação na factory (projects/{alias}/docs/)
+    #    Preservada mesmo se o projeto for deletado do helms.
+    factory_docs = PROJECTS_DIR / alias / "docs"
+    if not factory_docs.exists():
+        factory_docs.mkdir(parents=True, exist_ok=True)
+        print(f"{GREEN}[OK]{RESET} Pasta de docs criada: {CYAN}{factory_docs}{RESET}")
+    else:
+        print(f"{DIM}[--]{RESET} Pasta de docs já existe: {DIM}{factory_docs}{RESET}")
+
     print(f"\n{GREEN}✅  Projeto{RESET} '{CYAN}{key}{RESET}' {GREEN}{action}!{RESET}")
     print(f"\n   📁 {DIM}Projeto destino:{RESET} {CYAN}{project_root}{RESET}")
+    print(f"   📂 {DIM}Docs factory  :{RESET} {CYAN}{factory_docs}{RESET}")
     print(f"\n   📋 {BOLD}Próximos passos:{RESET}")
     print(f"      1. {DIM}cd {project_root}  &&  npm install (onde houver package.json){RESET}")
+    print(f"      2. {DIM}Coloque seus docs em {factory_docs}{RESET}")
+    print(f"         {DIM}e rode: python scripts/sync_docs.py {alias}{RESET}")
     print(f"\n   🖥️  {BOLD}GUS CLI:{RESET}")
     print(f"      {CYAN}gus dkup {key}{RESET}              {DIM}← sobe DB PROD{RESET}")
     print(f"      {CYAN}gus dkup-dev {key}{RESET}          {DIM}← sobe DB DEV{RESET}")

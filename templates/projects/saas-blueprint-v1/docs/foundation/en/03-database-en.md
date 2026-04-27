@@ -3,7 +3,14 @@
 
 > ✅ **Base schema pre-generated** in `services/backend/scripts/migrations/0001_initial_schema.py`.
 > **Do not recreate the base tables.** Use this doc as a reference for patterns and conventions.
-> Project business tables are created in custom migrations starting from `0003_`.
+>
+> **Migrations reserved by the framework:**
+> - `0001_initial_schema` — base tables (tenants, users, roles, pages, etc.)
+> - `0002_initial_seed_data` — initial data (default tenant, admin, colors, settings)
+> - `0003_etl_schema` — ETL tables (`etl_job_errors`) + queue settings (only if `etl` feature is enabled)
+> - `0004_event_bus_schema` — `events_outbox` (Transactional Outbox Pattern — always present)
+>
+> **Project business tables start at `0005_`.**
 
 This document defines the multi-tenant architecture, the soft delete pattern and the mandatory base tables.
 
@@ -188,19 +195,54 @@ CREATE TABLE tenant_colors (
 ```
 
 ### 7. migration_history
-Database execution history.
+Database execution history. System table — no `tenant_id`.
 ```sql
 CREATE TABLE migration_history (
     id SERIAL PRIMARY KEY,
     version VARCHAR(50) NOT NULL UNIQUE,
     name VARCHAR(255) NOT NULL,
-    status VARCHAR(20) NOT NULL DEFAULT 'applied',
+    status VARCHAR(20) NOT NULL DEFAULT 'applied', -- 'applied' | 'rolled_back'
     applied_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     rollback_at TIMESTAMP WITH TIME ZONE
 );
 ```
 
-### 8. integrations
+### 8. events_outbox
+**Transactional Outbox Pattern** table (created by `0004_event_bus_schema`). Allows modules to write reliable events inside the same business transaction. The `OutboxProcessor` (FastAPI background task) reads and delivers events after commit.
+
+> **No `active` or `last_updated_at`** — append-only. The `processed_at` and `failed_at` timestamps replace the lifecycle pattern.
+
+```sql
+CREATE TABLE events_outbox (
+    -- 1. ID
+    id           BIGSERIAL    PRIMARY KEY,
+    -- 2. Own fields
+    event_name   VARCHAR(100) NOT NULL,
+    payload      JSONB        NOT NULL DEFAULT '{}',
+    attempts     SMALLINT     NOT NULL DEFAULT 0,
+    max_attempts SMALLINT     NOT NULL DEFAULT 3,
+    last_error   TEXT,
+    processed_at TIMESTAMPTZ,          -- NULL = pending or dead-letter
+    failed_at    TIMESTAMPTZ,          -- NOT NULL = exhausted attempts (dead-letter)
+    -- 3. Inherited fields
+    tenant_id    INTEGER      NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_events_outbox_tenant  ON events_outbox (tenant_id);
+CREATE INDEX idx_events_outbox_pending ON events_outbox (tenant_id, created_at)
+    WHERE processed_at IS NULL AND failed_at IS NULL;
+```
+
+**Event states:**
+| `processed_at` | `failed_at` | State |
+|---|---|---|
+| `NULL` | `NULL` | 🟡 Pending |
+| `NOT NULL` | `NULL` | 🟢 Processed |
+| `NULL` | `NOT NULL` | 🔴 Dead-letter (exhausted `max_attempts`) |
+
+**Monitoring:** `Settings → Outbox` (admin-only) — stats, recent events, retry/discard dead-letters.
+
+### 9. integrations
 Manages AI, Embeddings and external system integrations per tenant.
 ```sql
 CREATE TABLE integrations (

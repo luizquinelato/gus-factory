@@ -2,9 +2,16 @@
 # 04. Migrations System
 
 > ✅ **Pre-generated automatically** by `create_project.py`.
-> The files `0001_initial_schema.py`, `0002_seed_data.py` and `migration_runner.py` are already in
-> `services/backend/scripts/`. **Do not recreate.** Use this doc only as a reference for patterns.
-> For business tables, create new migrations starting from `0003_`.
+> Migration files and `migration_runner.py` are already in `services/backend/scripts/`. **Do not recreate.**
+> Use this doc only as a reference for patterns.
+>
+> **Framework-reserved migrations (do not modify):**
+> - `0001` — base schema (tenants, users, roles, pages, colors, settings)
+> - `0002` — seed data (default tenant, admin, initial settings)
+> - `0003` — ETL schema (`etl_job_errors`) — present if `etl` feature is enabled
+> - `0004` — Event Bus (`events_outbox`) — always present
+>
+> **Your business migrations start at `0005_`.**
 
 This document defines the custom migration system for the database.
 
@@ -16,9 +23,11 @@ Migrations are pure Python scripts, organized in a specific folder:
 /services/backend/scripts/
 ├── migration_runner.py
 └── migrations/
-    ├── 0001_initial_schema.py
-    ├── 0002_seed_data.py
-    └── 0003_add_new_feature.py
+    ├── 0001_initial_schema.py       # framework — do not modify
+    ├── 0002_initial_seed_data.py    # framework — do not modify
+    ├── 0003_etl_schema.py           # framework — do not modify
+    ├── 0004_event_bus_schema.py     # framework — do not modify
+    └── 0005_add_products_table.py   # your migrations start here
 ```
 
 ## 📜 2. Migration Pattern

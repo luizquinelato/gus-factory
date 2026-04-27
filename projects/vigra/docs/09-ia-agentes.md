@@ -1,13 +1,13 @@
 <!-- blueprint: db_changes=true seed_data=false -->
 # Módulo 09 — IA & Agentes Autônomos
 
-IA integrada ao Plurus em duas camadas: **Chat** para análise rápida do negócio em linguagem natural, e **Agentes Autônomos** para execução de tarefas complexas e multi-step sem intervenção manual.
+IA integrada ao Vigra em duas camadas: **Chat** para análise rápida do negócio em linguagem natural, e **Agentes Autônomos** para execução de tarefas complexas e multi-step sem intervenção manual.
 
 ---
 
 ## 1. Chat de IA (Análise Rápida)
 
-Interface de chat dentro do dashboard do Plurus. O usuário faz perguntas sobre o próprio negócio e recebe respostas contextualizadas com os dados reais do tenant.
+Interface de chat dentro do dashboard do Vigra. O usuário faz perguntas sobre o próprio negócio e recebe respostas contextualizadas com os dados reais do tenant.
 
 ### Exemplos de perguntas suportadas
 - "Qual meu produto mais vendido esse mês?"
@@ -100,10 +100,14 @@ CREATE TABLE agent_executions (
     id SERIAL PRIMARY KEY,
     tenant_id INTEGER NOT NULL REFERENCES tenants(id),
     user_id INTEGER REFERENCES users(id),       -- null se disparado automaticamente
-    agent_type VARCHAR(50) NOT NULL,            -- 'campaign', 'forecast', 'restock', 'alert'
+    agent_type VARCHAR(50) NOT NULL,            -- 'campaign', 'forecast', 'restock', 'alert', 'onboarding'
     trigger_type VARCHAR(20) DEFAULT 'manual',  -- 'manual', 'scheduled', 'threshold'
     input_payload JSONB,                        -- instrução original do usuário
-    status VARCHAR(20) DEFAULT 'running',       -- 'running','completed','failed','cancelled'
+    status VARCHAR(20) DEFAULT 'running',
+                                                -- 'running','waiting_approval','completed','failed','cancelled'
+    approval_payload JSONB,                     -- dados preparados aguardando aprovação do usuário
+    approved_by INTEGER REFERENCES users(id),
+    approved_at TIMESTAMPTZ,
     steps JSONB,                                -- log de cada passo executado
     output_summary TEXT,                        -- resumo final apresentado ao usuário
     error_message TEXT,
@@ -113,6 +117,24 @@ CREATE TABLE agent_executions (
     completed_at TIMESTAMPTZ
 );
 ```
+
+---
+
+### Agente de Onboarding (Killer Feature — Primeiros 7 Dias)
+**Trigger**: automático no primeiro login do tenant após o cadastro
+
+**Objetivo**: guiar o usuário pelos primeiros passos críticos para que o sistema tenha dados reais e o valor percebido seja imediato. Reduz drasticamente o churn na primeira semana.
+
+**Fluxo do agente:**
+1. Pergunta qual o segmento do negócio (loja física, e-commerce, serviços, etc.)
+2. Sugere e importa um catálogo inicial de produtos via **planilha CSV/Excel** (ou modelo pré-pronto pelo segmento)
+3. Configura o primeiro depósito (`warehouses`) e o saldo inicial de estoque
+4. Orienta a conexão com o Mercado Livre (se aplicável) e exibe o primeiro pedido importado
+5. Configura a conta bancária e o saldo inicial para o fluxo de caixa
+6. Gera o primeiro relatório de saúde financeira com os dados inseridos
+7. Mostra um checklist de progresso: "Você completou 5 de 7 passos — sua loja está pronta!"
+
+**Human-in-the-loop obrigatório em**: importação do catálogo (usuário confirma os produtos antes de salvar), conexão com marketplace (OAuth2 requer ação do usuário).
 
 ---
 
@@ -139,8 +161,11 @@ Cada tool é uma função Python que o LLM pode invocar. Todas são read-only po
 ## 4. Regras de Negócio
 
 - Toda tool recebe `tenant_id` implicitamente — impossível acessar dados de outro tenant
+- **Human-in-the-loop é o padrão arquitetural**: todo agente que executa ações com impacto financeiro ou de comunicação em massa deve pausar com `status = 'waiting_approval'` antes de executar; só prossegue após confirmação explícita do usuário armazenada em `approved_by` + `approved_at`
 - Agentes que escrevem no banco (create/update) sempre criam em status `draft` ou `pending`; nunca publicam sem confirmação, exceto quando o usuário explicitamente autorizou "execute automaticamente"
+- `approval_payload` contém o resumo estruturado do que será executado (JSON) para que a UI mostre uma tela de confirmação clara ao usuário antes de prosseguir
 - Histórico de execuções de agentes preservado indefinidamente para auditoria
 - Custo de tokens é registrado por execução; relatório mensal de uso de IA disponível para o admin
 - Fallback de modelo: se OpenAI indisponível → usa Anthropic Claude; configurado em `system_settings`
 - Agente de alertas respeita horário comercial para notificações não urgentes (configurável por tenant)
+- Agente de Onboarding só é executado uma vez por tenant; progresso salvo em `system_settings` como `onboarding_completed = true`

@@ -27,12 +27,14 @@ CREATE TABLE products (
     brand VARCHAR(100),
     category_id INTEGER REFERENCES product_categories(id),
     unit VARCHAR(20) NOT NULL DEFAULT 'un',
-    type VARCHAR(20) NOT NULL DEFAULT 'simple',   -- 'simple', 'variable'
+    type VARCHAR(20) NOT NULL DEFAULT 'simple',   -- 'simple', 'variable', 'bundle'
     ncm VARCHAR(10),
     weight_kg NUMERIC(10,3),
     height_cm NUMERIC(10,2),
     width_cm NUMERIC(10,2),
     depth_cm NUMERIC(10,2),
+    meta_title VARCHAR(200),                      -- SEO: título para mecanismos de busca
+    meta_description VARCHAR(500),                -- SEO: descrição para mecanismos de busca
     active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     last_updated_at TIMESTAMPTZ DEFAULT NOW(),
@@ -81,6 +83,26 @@ CREATE TABLE product_categories (
     active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     last_updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE product_tags (
+    id SERIAL PRIMARY KEY,
+    tenant_id INTEGER NOT NULL REFERENCES tenants(id),
+    name VARCHAR(100) NOT NULL,    -- 'Dia das Mães', 'Lançamentos', 'Mais Vendidos'
+    slug VARCHAR(120) NOT NULL,
+    active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    last_updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(tenant_id, slug)
+);
+
+CREATE TABLE product_tag_links (
+    id SERIAL PRIMARY KEY,
+    product_id INTEGER NOT NULL REFERENCES products(id),
+    tag_id INTEGER NOT NULL REFERENCES product_tags(id),
+    active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(product_id, tag_id)
 );
 ```
 
@@ -196,3 +218,6 @@ CREATE TABLE campaigns (
 - Cupom de uso único por cliente verifica `uses_count` + `max_uses_per_client` atomicamente
 - Produto deletado (soft) mantém histórico em `order_items` e `stock_movements`
 - NCM é obrigatório para produtos destinados à emissão de NF (validação futura)
+- `meta_title` padrão = nome do produto; `meta_description` padrão = `short_description` (se não preenchidos manualmente)
+- Tags são livres e reutilizáveis entre produtos; usadas para criar coleções dinâmicas na loja virtual
+- Produto do tipo `bundle` não tem `cost_price` manual — é derivado dos componentes em `product_bundles`
