@@ -33,14 +33,21 @@ Como criar um módulo real (ex: cadastros):
    e incluirá o novo router automaticamente.
 
 --------------------------------------------------------------------
-Regras de isolamento (obrigatórias)
+Regras de isolamento — allowlist (obrigatórias)
 --------------------------------------------------------------------
-  ✅ from app.core.*          import ...
-  ✅ from app.dependencies.*  import ...
-  ✅ from app.schemas.common  import ...
-  ✅ from app.modules.outro.service import OutroService   (contrato público)
-  ❌ from app.modules.outro.router  import ...            (NUNCA)
-  ❌ from app.modules.outro.schemas import ...            (use schemas/common.py)
+  ✅ from app.core.*                    import ...
+  ✅ from app.dependencies.*            import ...
+  ✅ from app.schemas.common            import ...
+  ✅ from app.modules.outro.service     import OutroService  (ÚNICO permitido cross-módulo)
+  ❌ from app.modules.outro             import ...  (via __init__.py — NUNCA)
+  ❌ from app.modules.outro.router      import ...  (NUNCA)
+  ❌ from app.modules.outro.schemas     import ...  (use schemas/common.py)
+  ❌ from app.modules.outro.events      import ...  (NUNCA)
+  ❌ from app.modules.outro.models      import ...  (NUNCA)
+  ❌ from app.modules.outro.utils       import ...  (NUNCA)
+
+Regra: qualquer import de app.modules.X que não seja app.modules.X.service é violação.
+O pre-commit hook (check_module_imports.py) rejeita automaticamente.
 
 Eventos entre módulos → EventBus.emit() ou EventBus.emit_reliable()
 Nunca acesse tabelas de outro módulo diretamente.

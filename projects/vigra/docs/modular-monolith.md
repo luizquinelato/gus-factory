@@ -73,7 +73,7 @@ services/backend/app/
 │   ├── contabilidade/
 │   └── ia/
 ├── routers/                      # Routers do Core (auth, users, health, colors,
-│   │                             #   settings, admin, outbox)
+│                                 #   settings, admin, outbox)
 ├── services/                     # Services do Core (color, user)
 └── main.py
 ```
@@ -81,13 +81,13 @@ services/backend/app/
 ### Regras de organização
 
 1. **Cada módulo é uma pasta autossuficiente** dentro de `modules/`. Contém router, schemas, service e events.
-2. **Migrations ficam centralizadas** em `scripts/migrations/` (runner único), mas cada arquivo pertence a um módulo e é prefixado adequadamente.
-3. **Routers e services do Core** (auth, users, health, colors, settings) permanecem em `app/routers/` e `app/services/` — são infraestrutura compartilhada, não módulos de negócio.
+2. **Migrations ficam centralizadas** em `services/backend/scripts/migrations/` (runner único), mas cada arquivo pertence a um módulo e é prefixado adequadamente.
+3. **Routers e services do Core** (auth, users, health, colors, settings, admin, outbox) permanecem em `app/routers/` e `app/services/` — são infraestrutura compartilhada, não módulos de negócio.
 
 
 ---
 
-## 4. Três Pilares do Desacoplamento
+## 4. Quatro Pilares do Desacoplamento
 
 ### 4.1. Isolamento de Imports
 
@@ -112,10 +112,10 @@ A única exceção é quando o módulo B expõe uma **interface pública de leit
 
 #### Enforcement automático (pre-commit hook)
 
-Sem automação, essa regra degrada em semanas. O script `scripts/check_module_imports.py` implementa **allowlist**: qualquer import cross-módulo que não seja exatamente `.service` é rejeitado:
+Sem automação, essa regra degrada em semanas. O script `services/backend/scripts/check_module_imports.py` implementa **allowlist**: qualquer import cross-módulo que não seja exatamente `.service` é rejeitado:
 
 ```python
-# scripts/check_module_imports.py  (trecho ilustrativo — veja o arquivo completo)
+# services/backend/scripts/check_module_imports.py  (trecho ilustrativo — veja o arquivo completo)
 ALLOWED_CROSS_MODULE_SUBMODULE = "service"
 
 # submodule = quarta parte do import (ex: "router" em app.modules.X.router)
@@ -125,13 +125,13 @@ if submodule != ALLOWED_CROSS_MODULE_SUBMODULE:
 ```
 
 ```yaml
-# .pre-commit-config.yaml
+# .pre-commit-config.yaml  (raiz do projeto — já presente no repositório)
 repos:
   - repo: local
     hooks:
       - id: check-module-imports
         name: Verifica isolamento de módulos
-        entry: python scripts/check_module_imports.py
+        entry: python services/backend/scripts/check_module_imports.py
         language: python
         pass_filenames: false
         always_run: true
@@ -201,7 +201,7 @@ class EventBus:
                 INSERT INTO events_outbox (event_name, payload, tenant_id)
                 VALUES (:name, CAST(:payload AS jsonb), :tenant_id)
             """),
-            {"name": event_name, "payload": json.dumps(payload), "tenant_id": tenant_id},
+            {"name": event_name, "payload": json.dumps(payload, default=str), "tenant_id": tenant_id},
         )
         # NÃO faz commit — a transação do chamador controla isso.
 ```
@@ -308,6 +308,19 @@ Roda no lifespan do FastAPI. A cada `POLL_INTERVAL` segundos:
 
 Eventos com `failed_at IS NOT NULL` ficam na tabela para auditoria e reprocessamento manual.
 
+#### Admin UI — visibilidade operacional do Outbox
+
+O endpoint `routers/outbox_router.py` (registrado em `/admin/outbox`, `require_admin`) expõe a UI de monitoramento acessível em `Configurações → Outbox` no frontend (`pages/OutboxPage.tsx`). Todas as queries filtram por `tenant_id` do admin autenticado.
+
+| Operação | Endpoint | Descrição |
+|---|---|---|
+| Stats | `GET /admin/outbox/stats` | Total pendente / processado / dead-letter |
+| Recentes | `GET /admin/outbox/recent` | Últimos N eventos (qualquer estado) |
+| Dead-letters | `GET /admin/outbox/dead-letters` | Eventos com `failed_at IS NOT NULL` |
+| Retry | `POST /admin/outbox/{id}/retry` | Zera `attempts` e `failed_at` → reprocessa |
+| Discard | `DELETE /admin/outbox/{id}` | Remove permanentemente o evento dead-letter |
+| Test | `POST /admin/outbox/test` | Emite `system.outbox_test` para validar o pipeline |
+
 ### 4.4. Contratos entre Módulos (Service Interface)
 
 Se o módulo de Vendas precisa do preço de um produto, ele **não faz query na tabela `products`**. Ele chama o contrato público do módulo Cadastros:
@@ -340,19 +353,27 @@ O módulo de Vendas depende da **assinatura**, não da implementação interna. 
 
 > ⚠️ `emit_reliable` = grava em `events_outbox` dentro da transação → entregue pelo `OutboxProcessor`
 
+> **Eventos de framework/teste** — não fazem parte do mapa de negócio e não devem ser consumidos por módulos:
+> - `demo.ping` — emitido pelo módulo `demo` (template descartável, remover antes de ir para produção)
+> - `system.outbox_test` — emitido por `POST /admin/outbox/test` para validar o pipeline em operação
+>
+> Convenção: prefixo `system.*` é reservado para infraestrutura; prefixo `demo.*` para código de template.
+
 ---
 
 ## 6. Feature Flags por Tenant
 
 Nem todo tenant precisa de todos os módulos. Um MEI de serviços não precisa de Estoque nem Logística.
 
-O Module Registry lê os módulos habilitados para o tenant e:
-- **Backend**: só registra os routers dos módulos ativos
-- **Frontend**: só exibe as páginas e itens de sidebar dos módulos ativos
-- **Event Bus**: handlers de módulos inativos não são registrados
+O design prevê que o Module Registry leia os módulos habilitados para o tenant e:
+- **Backend**: registre apenas os routers dos módulos ativos
+- **Frontend**: exiba apenas as páginas e itens de sidebar dos módulos ativos
+- **Event Bus**: registre handlers apenas de módulos inativos
+
+> **Estado atual (V1):** `ModuleRegistry.include_all()` inclui todos os módulos registrados incondicionalmente. A filtragem por tenant via `system_settings` é o caminho planejado — ainda não implementada no registry. O controle de acesso por módulo hoje é feito pela camada de autenticação (rotas protegidas por `require_authentication` / `require_admin`).
 
 ```python
-# Configuração por tenant (tabela system_settings)
+# Design planejado — configuração por tenant (tabela system_settings)
 # setting_key = "enabled_modules"
 # setting_value = '["cadastros", "clientes", "vendas", "financeiro"]'
 # Estoque, Compras, Logística, Contabilidade, IA → desativados para este tenant
@@ -362,7 +383,7 @@ O Module Registry lê os módulos habilitados para o tenant e:
 
 ## 7. Migrations
 
-As migrations continuam centralizadas em `scripts/migrations/` (runner único), mas seguem uma convenção de prefixo por módulo:
+As migrations continuam centralizadas em `services/backend/scripts/migrations/` (runner único), mas seguem uma convenção de prefixo por módulo:
 
 | Faixa | Módulo |
 |---|---|
@@ -454,7 +475,7 @@ A Sidebar e o React Router carregam rotas condicionalmente com base nos módulos
 
 Cinco áreas que a arquitetura assume mas que precisam de disciplina ativa para não virarem bugs silenciosos.
 
-### 9.1. Tenant isolation nos handlers (⚠️ risco de cross-tenant leak)
+### 11.1. Tenant isolation nos handlers (⚠️ risco de cross-tenant leak)
 
 Handlers in-process **não têm middleware automático de tenant**. O `OutboxProcessor` injeta `__tenant_id__` no payload antes de chamar o handler — mas o handler precisa usá-lo.
 
@@ -478,7 +499,7 @@ async def on_order_confirmed(payload: dict) -> None:
 
 Para handlers de `emit()` direto (sem Outbox), o chamador é responsável por incluir `tenant_id` no payload — o processor não injeta porque não existe linha no outbox.
 
-### 9.2. Ordem de execução de handlers (fragilidade de import)
+### 11.2. Ordem de execução de handlers (fragilidade de import)
 
 `EventBus._handlers` é um `dict[str, list[Callable]]` — a ordem é a de subscrição, determinada pela ordem de `import app.modules.*` em `main.py`.
 
@@ -488,7 +509,7 @@ Para handlers de `emit()` direto (sem Outbox), o chamador é responsável por in
 
 Se uma sequência real for necessária, modelar como dois eventos distintos: `order.confirmed` → `stock.reserved` → `financeiro.ar_created`.
 
-### 9.3. Idempotência dos handlers (⚠️ at-least-once — efeito duplo é possível)
+### 11.3. Idempotência dos handlers (⚠️ at-least-once — efeito duplo é possível)
 
 O `OutboxProcessor` garante **at-least-once delivery**. Se o processo crashar entre `EventBus.emit()` e `UPDATE events_outbox SET processed_at` (janela de milissegundos), o evento será entregue de novo no próximo ciclo.
 
@@ -517,7 +538,7 @@ async def on_order_confirmed(payload: dict) -> None:
 
 **Convenção:** tabelas afetadas por `emit_reliable` devem ter coluna `outbox_event_id BIGINT UNIQUE` e o `INSERT ... ON CONFLICT (outbox_event_id) DO NOTHING`.
 
-### 9.4. AsyncSession no Service Interface
+### 11.4. AsyncSession no Service Interface
 
 Quando Vendas chama `CadastrosService.get_variation_price(variation_id, tenant_id)`, a sessão de banco precisa ser passada pelo chamador:
 
@@ -535,7 +556,7 @@ async def create_order(db: AsyncSession = Depends(get_db_session), ...):
 
 **Regra:** Service Interfaces usadas por outros módulos são **somente leitura** (métodos `get_*`). Escrita entre módulos sempre via `emit_reliable`, nunca via chamada direta de service.
 
-### 9.5. Module Registry: import-time vs runtime
+### 11.5. Module Registry: import-time vs runtime
 
 Registrar módulos via `import app.modules.X` em `main.py` é simples e correto para a escala atual (~9 módulos). O módulo inteiro é carregado no processo independente das feature flags do tenant.
 

@@ -22,12 +22,16 @@ no seu próprio __init__.py:
 O main.py importa cada módulo (triggering o registro) e depois chama
 ModuleRegistry.include_all(api_router) — uma única linha.
 
-Regras de isolamento
---------------------
+Regras de isolamento (allowlist)
+---------------------------------
   ✅ módulo → core/*, dependencies/*, schemas/common.py
-  ✅ módulo → outro_módulo/service.py  (contrato público de leitura)
-  ❌ módulo → outro_módulo/router.py   (nunca)
-  ❌ módulo → outro_módulo/repository.py ou schemas.py (nunca)
+  ✅ módulo → outro_módulo/service.py  (ÚNICO import cross-módulo permitido)
+  ❌ módulo → outro_módulo            (via __init__.py — nunca)
+  ❌ módulo → outro_módulo/router.py, /repository.py, /schemas.py (nunca)
+  ❌ módulo → outro_módulo/events.py, /models.py, /utils.py       (nunca)
+
+Regra precisa: qualquer import de app.modules.X que não seja app.modules.X.service é violação.
+O pre-commit hook (check_module_imports.py) rejeita automaticamente qualquer outra forma.
 
 Eventos entre módulos: usar EventBus.emit() ou EventBus.emit_reliable().
 Nunca acessar tabela de outro módulo diretamente.

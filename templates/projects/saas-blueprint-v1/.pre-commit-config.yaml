@@ -1,0 +1,23 @@
+# .pre-commit-config.yaml
+# ========================
+# Hooks de qualidade para o Modular Monolith.
+#
+# Instalação (uma vez por desenvolvedor):
+#   pip install pre-commit
+#   pre-commit install
+#
+# Rodar manualmente em todos os arquivos:
+#   pre-commit run --all-files
+
+repos:
+  - repo: local
+    hooks:
+      - id: check-module-imports
+        name: Verifica isolamento de módulos
+        description: >
+          Rejeita imports cross-módulo ilegais (allowlist: só .service permitido).
+          Ver services/backend/scripts/check_module_imports.py para detalhes.
+        entry: python services/backend/scripts/check_module_imports.py
+        language: python
+        pass_filenames: false
+        always_run: true
