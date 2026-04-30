@@ -22,7 +22,6 @@ Uso:
 """
 from __future__ import annotations
 import argparse
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -90,8 +89,13 @@ def apply_variant_files(variant: str, project_path: Path, verbose: bool = True) 
         raise ValueError(f"variante '{variant}' está incompleta — faltam: {', '.join(missing)}")
 
     # 1) Composes → raiz do projeto
+    # Usa read_text/write_text com encoding explícito (não shutil.copy2) para garantir
+    # que BOM e mojibake não sejam propagados de arquivos-fonte corrompidos no Windows.
     for name in COMPOSE_FILES:
-        shutil.copy2(variant_dir / name, project_path / name)
+        src  = variant_dir / name
+        dst  = project_path / name
+        text = src.read_text(encoding="utf-8").lstrip("\ufeff")  # strip BOM se presente
+        dst.write_text(text, encoding="utf-8", newline="\n")
         if verbose:
             print(f"  {GREEN}✓{RESET} {name}  {DIM}← {variant}/{RESET}")
 
@@ -100,7 +104,8 @@ def apply_variant_files(variant: str, project_path: Path, verbose: bool = True) 
     active_init  = primary_dir / VARIANT_INIT
     variant_init = variant_dir / VARIANT_INIT
     if variant_init.is_file():
-        shutil.copy2(variant_init, active_init)
+        text = variant_init.read_text(encoding="utf-8").lstrip("\ufeff")
+        active_init.write_text(text, encoding="utf-8", newline="\n")
         if verbose:
             print(f"  {GREEN}✓{RESET} {PRIMARY_SUBDIR / VARIANT_INIT}  {DIM}← {variant}/{RESET}")
     elif active_init.is_file():
